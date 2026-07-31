@@ -303,11 +303,13 @@ manifest gate before merge-ready.
 
 Before claiming merge-ready, commit `.lenny/evidence/<run-id>/` on the conducted
 branch. It contains `manifest.json` plus one artifact per required council,
-audit, build, test, live proof, re-audit, and terminal cross-council debate. Each artifact records reviewer
-seat/model/vendor, invocation time, exact reviewed commit + merge-base, diff
-SHA-256, prompt or prompt hash, full verdict/findings with file:line evidence,
-validation status, fix commit, re-audit verdict, commands, exit codes, and
-residual limitations.
+audit, build, test, live proof, re-audit, and terminal cross-council debate.
+Every artifact records its invocation time, exact reviewed commit + merge-base,
+diff SHA-256, and residual limitations. Machine-gate artifacts also record the
+command and exit code. Review artifacts also record the reviewer seat/model/vendor,
+prompt or prompt hash, full verdict/findings with file:line evidence, validation
+status, fix commit, and re-audit verdict. Mark an inapplicable field explicitly;
+do not silently omit it.
 
 The manifest indexes every artifact with SHA-256, its required/pass state, the
 single `reviewedCommit`, and finding lifecycle. Commit code first; reviews pin
@@ -322,9 +324,11 @@ reviewed commit, a failed required gate, or an open validated P0/P1 forbids
 merge-ready. Prose in a ledger is an index, never proof.
 
 The validator checks declared gate completeness, Git/diff binding, artifact
-integrity, and clean upstream state. It cannot prove a reviewer's real identity
-or independence; preserve raw process outputs so humans and later audits can
-inspect those provenance claims.
+integrity, and clean upstream state. It does not parse the semantic truth of
+arbitrary tool output or authenticate process provenance. Preserve raw process
+outputs so humans and independent audits can inspect reviewer identity,
+independence, commands, and verdicts. A structurally valid bundle is an auditable
+record, not cryptographic proof that its claims are true.
 
 ### Merge-Ready Claim Interlock (mandatory)
 
