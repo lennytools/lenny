@@ -1,0 +1,8 @@
+.DS_Store
+*.log
+node_modules/
+.env
+.env.*
+CONDUCTOR-RUN.md
+.lenny/run-queue.json
+.lenny/locks/
