@@ -35,10 +35,14 @@ Copy the skill contents into your project, then add the Lenny instructions:
 
 ```bash
 # get Lenny, then run the remaining commands from your project root
-LENNY_SOURCE_DIR="$(mktemp -d)"
-git clone https://github.com/lennytools/lenny.git "$LENNY_SOURCE_DIR"
 (
-  mkdir -p skills
+  LENNY_SOURCE_DIR="$(mktemp -d)" || exit 1
+  git clone https://github.com/lennytools/lenny.git "$LENNY_SOURCE_DIR" || exit 1
+  if [ -L skills ] || { [ -e skills ] && [ ! -d skills ]; }; then
+    echo "skills exists but is not a project directory; stop and inspect it." >&2
+    exit 1
+  fi
+  mkdir -p skills || exit 1
   for source_skill in "$LENNY_SOURCE_DIR"/skills/*; do
     skill_name="$(basename "$source_skill")"
     if [ -e "skills/$skill_name" ] || [ -L "skills/$skill_name" ]; then
@@ -46,11 +50,11 @@ git clone https://github.com/lennytools/lenny.git "$LENNY_SOURCE_DIR"
       exit 1
     fi
   done
-  cp -R "$LENNY_SOURCE_DIR/skills/." ./skills/
+  cp -R "$LENNY_SOURCE_DIR/skills/." ./skills/ || exit 1
   if [ -e AGENTS.md ] || [ -L AGENTS.md ]; then
     echo "AGENTS.md exists; merge Lenny's sections instead of overwriting it."
   else
-    cp "$LENNY_SOURCE_DIR/AGENTS.md" ./AGENTS.md
+    cp "$LENNY_SOURCE_DIR/AGENTS.md" ./AGENTS.md || exit 1
   fi
 )
 ```
