@@ -42,6 +42,10 @@ Copy the skill contents into your project, then add the Lenny instructions:
     echo "skills exists but is not a project directory; stop and inspect it." >&2
     exit 1
   fi
+  if [ -e AGENTS.md ] || [ -L AGENTS.md ]; then
+    echo "AGENTS.md exists; stop and merge Lenny's sections manually." >&2
+    exit 1
+  fi
   mkdir -p skills || exit 1
   for source_skill in "$LENNY_SOURCE_DIR"/skills/*; do
     skill_name="$(basename "$source_skill")"
@@ -51,17 +55,14 @@ Copy the skill contents into your project, then add the Lenny instructions:
     fi
   done
   cp -R "$LENNY_SOURCE_DIR/skills/." ./skills/ || exit 1
-  if [ -e AGENTS.md ] || [ -L AGENTS.md ]; then
-    echo "AGENTS.md exists; merge Lenny's sections instead of overwriting it."
-  else
-    cp "$LENNY_SOURCE_DIR/AGENTS.md" ./AGENTS.md || exit 1
-  fi
+  cp "$LENNY_SOURCE_DIR/AGENTS.md" ./AGENTS.md || exit 1
 )
 ```
 
 Codex reads `AGENTS.md` natively. Edit its `## Conductor` section for your
-project. If your project already has an `AGENTS.md`, clone Lenny but merge its Skills,
-Conductor, and agent-convention sections into it instead of overwriting it.
+project. If your project already has an `AGENTS.md`, the quickstart stops before
+changing the project. Copy only non-colliding skills, then merge Lenny's Skills,
+Conductor, and agent-convention sections into the existing file.
 
 ## Use
 
