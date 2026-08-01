@@ -11,16 +11,18 @@ const manifestBytes = readFileSync(resolve(dir, 'manifest.json'));
 const manifest = JSON.parse(manifestBytes.toString('utf8'));
 const claimScope = manifest.claim?.scope;
 const realDir = realpathSync(dir);
+let repoRoot = null;
 for (const key of ['runId', 'reviewedCommit', 'mergeBase', 'diffSha256']) {
   if (typeof manifest[key] !== 'string' || !manifest[key]) throw new Error(`missing ${key}`);
 }
 if (claimScope !== 'fleet') {
-  const actualMergeBase = gitText(['merge-base', manifest.mergeBase, manifest.reviewedCommit]);
+  repoRoot = realpathSync(gitText(['-C', dir, 'rev-parse', '--show-toplevel']));
+  const actualMergeBase = gitText(['-C', repoRoot, 'merge-base', manifest.mergeBase, manifest.reviewedCommit]);
   if (actualMergeBase !== manifest.mergeBase) throw new Error('merge-base mismatch');
   const diffArgs = manifest.mergeBase === manifest.reviewedCommit
     ? ['diff-tree', '--root', '--binary', '--no-commit-id', '-r', manifest.reviewedCommit]
     : ['diff', '--binary', `${manifest.mergeBase}..${manifest.reviewedCommit}`];
-  const actualDiffSha256 = createHash('sha256').update(gitBytes(diffArgs)).digest('hex');
+  const actualDiffSha256 = createHash('sha256').update(gitBytes(['-C', repoRoot, ...diffArgs])).digest('hex');
   if (actualDiffSha256 !== manifest.diffSha256) throw new Error('diff hash mismatch');
 } else if (manifest.mergeBase !== manifest.reviewedCommit || manifest.diffSha256 !== manifest.reviewedCommit) {
   throw new Error('fleet graph hash mismatch');
@@ -46,9 +48,9 @@ for (const finding of manifest.findings || []) {
 }
 let status = null;
 if (claimScope !== 'fleet') {
-  const git = spawnSync('git', ['diff', '--quiet', `${manifest.reviewedCommit}..HEAD`, '--', '.', ':(exclude).lenny/evidence/**']);
+  const git = spawnSync('git', ['-C', repoRoot, 'diff', '--quiet', `${manifest.reviewedCommit}..HEAD`, '--', '.', ':(exclude).lenny/evidence/**']);
   if (git.status !== 0) throw new Error('code changed after reviewedCommit');
-  status = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8' });
+  status = spawnSync('git', ['-C', repoRoot, 'status', '--porcelain'], { encoding: 'utf8' });
   if (status.status !== 0) throw new Error('cannot inspect worktree');
   const dirtyCode = status.stdout.split('\n').filter(Boolean).some((line) => !line.slice(3).startsWith('.lenny/evidence/'));
   if (dirtyCode) throw new Error('uncommitted non-evidence changes');
@@ -60,7 +62,6 @@ if (claimMergeReady) {
     throw new Error('missing merge-ready claim scope');
   }
   if (claim.scope !== 'fleet') {
-    const repoRoot = realpathSync(gitText(['rev-parse', '--show-toplevel']));
     const evidenceRoot = realpathSync(resolve(repoRoot, '.lenny/evidence'));
     const evidenceRel = relative(evidenceRoot, realDir);
     if (!evidenceRel || evidenceRel.startsWith(`..${sep}`) || evidenceRel === '..') {
@@ -78,6 +79,7 @@ if (claimMergeReady) {
   if (!passed('terminal_debate').length) throw new Error('missing passing terminal debate');
 
   if (claim.scope === 'ship') {
+    if (!passed('done_council').length) throw new Error('missing passing done council');
     for (const kind of ['test', 'build', 'leak_scan', 'live_qa']) {
       if (!passed(kind).length) throw new Error(`missing passing ${kind} gate`);
     }
@@ -144,8 +146,8 @@ if (claimMergeReady) {
   let upstream;
   if (claim.scope !== 'fleet') {
     if (status.stdout.trim()) throw new Error('worktree must be clean for merge-ready claim');
-    head = gitText(['rev-parse', 'HEAD']);
-    upstream = gitText(['rev-parse', '@{upstream}']);
+    head = gitText(['-C', repoRoot, 'rev-parse', 'HEAD']);
+    upstream = gitText(['-C', repoRoot, 'rev-parse', '@{upstream}']);
     if (head !== upstream) throw new Error('local HEAD does not equal upstream HEAD');
   }
   const receipt = {

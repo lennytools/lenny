@@ -31,8 +31,8 @@ instructions file under a `## Conductor` section:
 - **Councils** - the review panels Phase 3 routes to, keyed by what a batch
   touches. The routing table in Phase 3 is one project's default; a repo that
   declares its own panels overrides it. If a repo defines none, default to
-  `claudes-gamble` adversarial panels across correctness / security /
-  operability / user-impact lenses.
+  a generic `council` with correctness / security / operability / user-impact
+  seats.
 - **Verification build** - the exact command(s) that match production builds
   (Phase 5). Dev-mode servers rarely typecheck or bundle like prod; never trust
   them alone.
@@ -187,8 +187,7 @@ Route by what the batch touched. Each row convenes a council built with the
 generic `council` skill; define the seats for your domain (see
 `skills/council/`). The rows below are examples - your project declares its own in
 its `AGENTS.md` `## Conductor` section. If none are declared, default to a
-`claudes-gamble` adversarial panel across correctness / security / operability /
-user-impact.
+generic `council` with correctness / security / operability / user-impact seats.
 
 | The batch involves… | Convene (a `council` with these seats) |
 |---|---|
@@ -303,7 +302,8 @@ manifest gate before merge-ready.
 
 Before claiming merge-ready, commit `.lenny/evidence/<run-id>/` on the conducted
 branch. It contains `manifest.json` plus one artifact per required council,
-audit, build, test, live proof, re-audit, and terminal cross-council debate.
+audit, build, test, live proof, re-audit, terminal cross-council debate, and
+Terminus done-council.
 Every artifact records its invocation time, exact reviewed commit + merge-base,
 diff SHA-256, and residual limitations. Machine-gate artifacts also record the
 command and exit code. Review artifacts also record the reviewer seat/model/vendor,
@@ -345,8 +345,8 @@ For a Ship claim, `manifest.json` must include `claim.status: merge-ready`,
 `claim.requiredCouncils` list. Required passing gates use typed `kind` values:
 `test`, `build`, `leak_scan`, `live_qa`, `council`, two independent
 `p0_p1_audit` entries with distinct `reviewerId` values and at least one vendor
-different from the driver, plus `terminal_debate`. Council gates carry
-`councilId`.
+different from the driver, plus distinct `terminal_debate` and `done_council`
+gates. Council gates carry `councilId`.
 
 Strict mode also requires a fully clean worktree and exact local/upstream HEAD
 identity. On success it prints `MERGE-READY INTERLOCK: PASS` and a JSON receipt

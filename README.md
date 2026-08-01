@@ -38,31 +38,51 @@ Copy the skill contents into your project, then add the Lenny instructions:
 (
   LENNY_SOURCE_DIR="$(mktemp -d)" || exit 1
   git clone https://github.com/lennytools/lenny.git "$LENNY_SOURCE_DIR" || exit 1
-  if [ -L skills ] || { [ -e skills ] && [ ! -d skills ]; }; then
-    echo "skills exists but is not a project directory; stop and inspect it." >&2
+  if [ -e skills ] || [ -L skills ]; then
+    echo "skills exists; stop and merge Lenny's skills manually." >&2
     exit 1
   fi
   if [ -e AGENTS.md ] || [ -L AGENTS.md ]; then
     echo "AGENTS.md exists; stop and merge Lenny's sections manually." >&2
     exit 1
   fi
-  mkdir -p skills || exit 1
-  for source_skill in "$LENNY_SOURCE_DIR"/skills/*; do
-    skill_name="$(basename "$source_skill")"
-    if [ -e "skills/$skill_name" ] || [ -L "skills/$skill_name" ]; then
-      echo "skills/$skill_name exists; stop and merge it manually." >&2
-      exit 1
+  LENNY_STAGE_DIR="$(mktemp -d "$PWD/.lenny-install.XXXXXX")" || exit 1
+  LENNY_INSTALL_STATE=0
+  cleanup_lenny_stage() {
+    case "$LENNY_STAGE_DIR" in
+      "$PWD"/.lenny-install.*) rm -rf -- "$LENNY_STAGE_DIR" ;;
+      *) return 1 ;;
+    esac
+  }
+  rollback_lenny_install() {
+    if [ "$LENNY_INSTALL_STATE" -ge 2 ] && [ -e AGENTS.md ]; then
+      mv AGENTS.md "$LENNY_STAGE_DIR/AGENTS.md" || return 1
     fi
-  done
-  cp -R "$LENNY_SOURCE_DIR/skills/." ./skills/ || exit 1
-  cp "$LENNY_SOURCE_DIR/AGENTS.md" ./AGENTS.md || exit 1
+    if [ "$LENNY_INSTALL_STATE" -ge 1 ] && [ -d skills ]; then
+      mv skills "$LENNY_STAGE_DIR/skills" || return 1
+    fi
+    LENNY_INSTALL_STATE=0
+    cleanup_lenny_stage
+  }
+  trap 'rollback_lenny_install' EXIT
+  trap 'rollback_lenny_install; exit 1' HUP INT TERM
+  cp -R "$LENNY_SOURCE_DIR/skills" "$LENNY_STAGE_DIR/skills" || exit 1
+  cp "$LENNY_SOURCE_DIR/AGENTS.md" "$LENNY_STAGE_DIR/AGENTS.md" || exit 1
+  mv "$LENNY_STAGE_DIR/skills" ./skills || exit 1
+  LENNY_INSTALL_STATE=1
+  LENNY_INSTALL_STATE=2
+  mv "$LENNY_STAGE_DIR/AGENTS.md" ./AGENTS.md || exit 1
+  LENNY_INSTALL_STATE=0
+  rmdir "$LENNY_STAGE_DIR" || exit 1
+  trap - EXIT HUP INT TERM
 )
 ```
 
 Codex reads `AGENTS.md` natively. Edit its `## Conductor` section for your
-project. If your project already has an `AGENTS.md`, the quickstart stops before
-changing the project. Copy only non-colliding skills, then merge Lenny's Skills,
-Conductor, and agent-convention sections into the existing file.
+project. The quickstart installs only into a project with no `skills` path and no
+`AGENTS.md`; otherwise it stops before changing the project. Copy only
+non-colliding skills, then merge Lenny's Skills, Conductor, and agent-convention
+sections into the existing file.
 
 ## Use
 

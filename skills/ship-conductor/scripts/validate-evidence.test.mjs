@@ -41,6 +41,7 @@ const gates = [
   gate('audit-claude', 'p0_p1_audit', { reviewerId: 'claude-b', vendor: 'anthropic' }),
   gate('correctness-council', 'council', { councilId: 'example-council' }),
   gate('terminal-debate', 'terminal_debate'),
+  gate('done-council', 'done_council'),
 ];
 writeFileSync(join(dir, 'manifest.json'), JSON.stringify({
   runId: 'example-run', reviewedCommit, mergeBase: reviewedCommit,
@@ -101,7 +102,7 @@ const externalBundle = mkdtempSync(join(tmpdir(), 'lenny-external-evidence-'));
 cpSync(dir, externalBundle, { recursive: true });
 const external = spawnSync('node', [validator, externalBundle, '--claim-merge-ready'],
   { cwd: root, encoding: 'utf8' });
-if (external.status === 0 || !external.stderr.includes('evidence bundle must be under .lenny/evidence')) {
+if (external.status === 0) {
   throw new Error('interlock accepted evidence outside the committed bundle tree');
 }
 
@@ -137,6 +138,14 @@ if (noTerminal.status === 0 || !noTerminal.stderr.includes('missing passing term
   throw new Error('interlock accepted missing terminal debate');
 }
 writeFileSync(manifestPath, validManifest);
+const missingDoneCouncil = JSON.parse(validManifest);
+missingDoneCouncil.gates = missingDoneCouncil.gates.filter((item) => item.kind !== 'done_council');
+writeFileSync(manifestPath, JSON.stringify(missingDoneCouncil));
+const noDoneCouncil = spawnSync('node', [validator, dir, '--claim-merge-ready'], { cwd: root, encoding: 'utf8' });
+if (noDoneCouncil.status === 0 || !noDoneCouncil.stderr.includes('missing passing done council')) {
+  throw new Error('interlock accepted missing done council');
+}
+writeFileSync(manifestPath, validManifest);
 const missingLiveQa = JSON.parse(validManifest);
 missingLiveQa.gates = missingLiveQa.gates.filter((item) => item.kind !== 'live_qa');
 writeFileSync(manifestPath, JSON.stringify(missingLiveQa));
@@ -148,6 +157,13 @@ writeFileSync(manifestPath, validManifest);
 writeFileSync(join(root, 'code.txt'), 'changed after review\n');
 const rejected = spawnSync('node', [validator, dir], { cwd: root });
 if (rejected.status === 0) throw new Error('validator accepted stale evidence');
+run('git', ['add', 'code.txt']);
+run('git', ['commit', '-qm', 'change code after review']);
+const rejectedFromNestedDir = spawnSync('node', [validator, dir],
+  { cwd: join(root, '.lenny/evidence'), encoding: 'utf8' });
+if (rejectedFromNestedDir.status === 0 || !rejectedFromNestedDir.stderr.includes('code changed after reviewedCommit')) {
+  throw new Error('validator accepted stale evidence from a nested working directory');
+}
 
 const fleetRoot = mkdtempSync(join(tmpdir(), 'lenny-fleet-evidence-'));
 const fleetDir = join(fleetRoot, 'fleet-run');
