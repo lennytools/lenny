@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "gateId": "done-council",
+  "kind": "done_council",
+  "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f",
+  "verdict": "GO",
+  "exitCode": 0,
+  "outcome": "A stranger can install Lenny into a non-empty repository, say “set up Lenny,” receive a sensible three-seat implementation council and successfully conduct one small plan to a verified merge-ready branch.",
+  "criteriaPassed": 7,
+  "criteriaRequired": 7,
+  "strangerProof": {
+    "repository": "/private/tmp/lenny-final-xPZEFw",
+    "featureBranch": "feature/add-decrement",
+    "reviewedCommit": "95302ee96b4a7f7833c34d7fe2bfe2541eb195ea",
+    "remoteEvidenceCommit": "c7ffd9c37919678470faf22c1ff423c3883642e9",
+    "remote": "/tmp/lenny-final-remote-1mjwlh",
+    "interlockVerdict": "PASS",
+    "evidenceManifestSha256": "6feebd5ef45bc58a352855f982300e7aa1fdc4338ef6716c78ca1e3b79be123f",
+    "latestCoreRecheck": "The core from 01afaa3 was installed into the same non-empty fixture, deep Doctor returned healthy and the installed strict validator revalidated the remote-advertised evidence at exit 0."
+  },
+  "releaseCut": {
+    "mustShipNow": [
+      "Codex-first install, setup, Doctor, update and uninstall",
+      "default three-seat Software Implementation Council",
+      "risk-adaptive evidence and merge-ready interlock",
+      "automated tests, CI and semantic release preparation"
+    ],
+    "fastFollow": [
+      "Claude Code host support"
+    ],
+    "notDoing": [
+      "publishing Bradley-specific councils as public defaults",
+      "opening a pull request, merging, tagging, releasing or deploying in this run"
+    ]
+  }
+}

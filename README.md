@@ -4,7 +4,7 @@
 
 You hand Lenny a plan. It drives the whole thing to a merge-ready branch:
 ground-truth → branch → build in slices → adversarial council gates → ship cutoff
-→ green gate → two independent audits → a done-council → **STOP at merge-ready.**
+→ green gate → risk-matched independent audit → a done-council → **STOP at merge-ready.**
 You review and merge. Lenny never opens the PR and never merges; the irreversible
 calls stay yours.
 
@@ -14,7 +14,7 @@ subscription you already pay for.
 
 - Site: [lenny.tools](https://lenny.tools)
 - Demo: [a council gate that catches a real defect](DEMO.md)
-- Verified first on Codex. Claude Code and GLM ports follow.
+- Supported host in this release: Codex on macOS and Linux. Other hosts follow.
 - License: MIT
 
 ## Why
@@ -28,69 +28,73 @@ top of your agent instead of a closed platform.
 
 ## Install
 
-Requires Git and Node.js 18 or newer. Node only runs the evidence checker;
-Lenny itself is still instructions, not a service or agent runtime.
-
-Copy the skill contents into your project, then add the Lenny instructions:
+Requires Git, Node.js 20 or newer and Codex on macOS or Linux. Open the desired
+[GitHub release](https://github.com/lennytools/lenny/releases), then copy its
+**Install** command. Every release publishes a command shaped like this:
 
 ```bash
-# get Lenny, then run the remaining commands from your project root
-(
-  LENNY_SOURCE_DIR="$(mktemp -d)" || exit 1
-  git clone https://github.com/lennytools/lenny.git "$LENNY_SOURCE_DIR" || exit 1
-  if [ -e skills ] || [ -L skills ]; then
-    echo "skills exists; stop and merge Lenny's skills manually." >&2
-    exit 1
-  fi
-  if [ -e AGENTS.md ] || [ -L AGENTS.md ]; then
-    echo "AGENTS.md exists; stop and merge Lenny's sections manually." >&2
-    exit 1
-  fi
-  LENNY_STAGE_DIR="$(mktemp -d "$PWD/.lenny-install.XXXXXX")" || exit 1
-  LENNY_INSTALL_STATE=0
-  cleanup_lenny_stage() {
-    case "$LENNY_STAGE_DIR" in
-      "$PWD"/.lenny-install.*) rm -rf -- "$LENNY_STAGE_DIR" ;;
-      *) return 1 ;;
-    esac
-  }
-  rollback_lenny_install() {
-    if [ "$LENNY_INSTALL_STATE" -ge 2 ] && [ -e AGENTS.md ]; then
-      mv AGENTS.md "$LENNY_STAGE_DIR/AGENTS.md" || return 1
-    fi
-    if [ "$LENNY_INSTALL_STATE" -ge 1 ] && [ -d skills ]; then
-      mv skills "$LENNY_STAGE_DIR/skills" || return 1
-    fi
-    LENNY_INSTALL_STATE=0
-    cleanup_lenny_stage
-  }
-  trap 'rollback_lenny_install' EXIT
-  trap 'rollback_lenny_install; exit 1' HUP INT TERM
-  cp -R "$LENNY_SOURCE_DIR/skills" "$LENNY_STAGE_DIR/skills" || exit 1
-  cp "$LENNY_SOURCE_DIR/AGENTS.md" "$LENNY_STAGE_DIR/AGENTS.md" || exit 1
-  mv "$LENNY_STAGE_DIR/skills" ./skills || exit 1
-  LENNY_INSTALL_STATE=1
-  LENNY_INSTALL_STATE=2
-  mv "$LENNY_STAGE_DIR/AGENTS.md" ./AGENTS.md || exit 1
-  LENNY_INSTALL_STATE=0
-  rmdir "$LENNY_STAGE_DIR" || exit 1
-  trap - EXIT HUP INT TERM
-)
+curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/<40-CHARACTER-RELEASE-COMMIT>/scripts/install.sh \
+  | sh -s -- --version v0.1.0 --commit <SAME-40-CHARACTER-RELEASE-COMMIT>
 ```
 
-Codex reads `AGENTS.md` natively. Edit its `## Conductor` section for your
-project. The quickstart installs only into a project with no `skills` path and no
-`AGENTS.md`; otherwise it stops before changing the project. Copy only
-non-colliding skills, then merge Lenny's Skills, Conductor, and agent-convention
-sections into the existing file.
+Both the first downloaded byte and the source it executes are bound to the same
+immutable commit; the semantic tag is only a human-readable release selector.
+If you prefer to inspect the bootstrap before execution, use the same commit
+from the release page:
+
+```bash
+curl -fsSLo /tmp/lenny-install.sh \
+  https://raw.githubusercontent.com/lennytools/lenny/<RELEASE-COMMIT>/scripts/install.sh
+less /tmp/lenny-install.sh
+sh /tmp/lenny-install.sh --version v0.1.0 --commit <RELEASE-COMMIT> --dry-run
+sh /tmp/lenny-install.sh --version v0.1.0 --commit <RELEASE-COMMIT>
+```
+
+The installer owns only `.lenny/core` and one visibly marked block in
+`AGENTS.md`. Existing instructions, project skills, `.lenny/profile.md`, evidence
+and run history are preserved. Installation is staged, rollback-safe,
+idempotent and refuses ambiguous markers or symlink targets.
+
+Now open the repository in Codex and say:
+
+> Set up Lenny.
+
+Lenny detects the stack and verification commands, writes
+`.lenny/profile.md`, configures the default three-seat Software Implementation
+Council and runs Doctor. Verify at any time:
+
+```bash
+node .lenny/core/bin/lenny.mjs doctor
+```
+
+Ordinary Doctor is non-executing: it checks managed installation state, Codex
+availability and whether verification is resolved. After reviewing the profile,
+run `node .lenny/core/bin/lenny.mjs doctor --deep true` to execute the configured
+project test/build commands. Unresolved verification or live-QA fields fail
+closed until setup resolves them or records an explicit not-applicable reason.
+
+Every command supports local help without changing the repository:
+
+```bash
+node .lenny/core/bin/lenny.mjs doctor --help
+```
+
+Preview an update by rerunning the desired pinned installer with `--dry-run`.
+Uninstall only the managed core and routing block with:
+
+```bash
+node .lenny/core/bin/lenny.mjs uninstall --dry-run
+node .lenny/core/bin/lenny.mjs uninstall
+```
 
 ## Use
 
-1. Draft a plan, or let the agent draft one from your intent.
-2. `grill-me`: the agent interrogates the plan until you share an understanding.
-3. Say **"conduct this plan."** `ship-conductor` drives it to a merge-ready branch
+1. Say **“Set up Lenny”** once per repository and review `.lenny/profile.md`.
+2. Draft a plan, or let the agent draft one from your intent.
+3. `grill-me`: the agent interrogates the plan until you share an understanding.
+4. Say **"conduct this plan."** `ship-conductor` drives it to a merge-ready branch
    and stops.
-4. Progress lives in `CONDUCTOR-RUN.md` on disk. Peek any time; it also makes
+5. Progress lives in `CONDUCTOR-RUN.md` on disk. Peek any time; it also makes
    runs resumable after a lost session.
 
 ## What's inside
@@ -115,6 +119,24 @@ domain: your lenses). Seats reason blind, then debate to a consensus with a
 dissent register. Runs cross-vendor when you have a second model, so one builds
 and another audits.
 
+**Setup and outcome integrity:** `setup-lenny` creates the persistent project
+profile and runs Doctor. `outcome-lock` prevents an agent or council from
+quietly redefining what “done” means.
+
+## Default implementation council
+
+Every new installation starts with three narrow seats:
+
+1. **Contract / correctness:** did the diff deliver the frozen outcome?
+2. **Failure / security:** how can it fail, lose data or violate authority?
+3. **Simplicity / maintainability:** is it the smallest coherent change?
+
+Standard reversible work uses this council and one independent audit. Work that
+touches authentication, secrets, money, custody, destructive persistence,
+migrations, production infrastructure or security boundaries automatically
+uses the full high-stakes debate and audit path. Tests, build, leak scan, live QA
+and the done review remain mandatory in both modes.
+
 ## The non-negotiables baked in
 
 - **STOP at merge-ready.** Push the branch, never open the PR, never merge, never
@@ -125,19 +147,30 @@ and another audits.
 - **Config, not a runtime.** Lenny is instructions your agent reads. That is what
   lets it run in any harness.
 
-## Model-agnostic, and better multi-model
+## Codex first, model-flexible by design
 
-Plug in your own model and subscription. Lenny runs across harnesses today, and it
-is multi-model on purpose: it can build with one vendor and have a *different*
-vendor audit the work, so cross-vendor independence is a built-in quality feature,
-not a constraint. No lock-in; it improves as your models do.
+This release supports Codex as the driving host. Lenny remains plain instructions
+and deterministic support scripts, so it does not depend on one model API. For
+high-stakes work it can ask a different authorized vendor to audit the diff, but
+cross-vendor availability is never misrepresented.
 
 ## Roadmap
 
-This repo is the open layer: a plan to merge-ready. The north star is the
-**self-driving software factory**: you give it a destination (the app you want),
-it drives the full lifecycle, ships, and stays on to monitor and auto-fix. That is
-the commercial product built on this open layer. See `lenny.tools`.
+This repository has one boundary: intent or plan to a verified merge-ready
+software implementation. Codex is first. Claude Code and other host adapters,
+personal council packs and domain packs follow after the Codex path is proven.
+Deployment, DevOps, production monitoring and auto-merge are not part of this
+product boundary.
+
+## Development and releases
+
+Run the complete local gate with `npm run check`. CI runs it on macOS and Linux
+across supported Node versions. `VERSION`, `package.json` and `CHANGELOG.md`
+must agree before a `v<version>` tag can create a GitHub release. See
+[the release contract](docs/RELEASING.md) and
+[the install-design benchmark](docs/INSTALL-DESIGN.md). To create your own
+skills or councils, read [Personalizing Lenny](docs/CUSTOMIZATION.md) or say
+**“Set up my skills”** in Codex.
 
 ## Contributing
 

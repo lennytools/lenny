@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "recorder": "lenny-gate-runner@0.1.0",
+  "gateId": "live-qa",
+  "kind": "live_qa",
+  "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f",
+  "verdict": "PASS",
+  "exitCode": 0,
+  "command": [
+    "node",
+    "--test",
+    "--test-name-pattern=public shell installer completes",
+    "tests/lenny-cli.test.mjs"
+  ],
+  "cwd": ".",
+  "startedAt": "2026-08-31T16:28:22.240Z",
+  "finishedAt": "2026-08-31T16:28:23.226Z",
+  "durationMs": 986,
+  "outputSha256": "ccb6cafcfa4ed2d3aade8f8606fdef63b7c0dacc809a801d6b68bf6fd99985f7",
+  "stdoutBytes": 196,
+  "stderrBytes": 0
+}

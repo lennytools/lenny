@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Require release tag to come from canonical main
+        run: |
+          git fetch --no-tags origin main
+          EVENT_COMMIT=$(git rev-parse "$GITHUB_SHA^{commit}")
+          test "$(git rev-parse HEAD)" = "$EVENT_COMMIT"
+          git merge-base --is-ancestor "$EVENT_COMMIT" origin/main
+          REMOTE_TAGS=$(git ls-remote --tags origin "refs/tags/$GITHUB_REF_NAME" "refs/tags/$GITHUB_REF_NAME^{}")
+          REMOTE_TAG_COMMIT=$(printf '%s\n' "$REMOTE_TAGS" | awk '$2 ~ /\^\{\}$/ {print $1; found=1} END {if (!found) {}}')
+          if [ -z "$REMOTE_TAG_COMMIT" ]; then
+            REMOTE_TAG_COMMIT=$(printf '%s\n' "$REMOTE_TAGS" | awk '$2 !~ /\^\{\}$/ {print $1}')
+          fi
+          test "$REMOTE_TAG_COMMIT" = "$EVENT_COMMIT"
+      - run: npm run check
+      - run: node scripts/check-release.mjs "$GITHUB_REF_NAME"
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Create immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          EVENT_COMMIT=$(git rev-parse "$GITHUB_SHA^{commit}")
+          test "$(git rev-parse HEAD)" = "$EVENT_COMMIT"
+          REMOTE_TAGS=$(git ls-remote --tags origin "refs/tags/$GITHUB_REF_NAME" "refs/tags/$GITHUB_REF_NAME^{}")
+          REMOTE_TAG_COMMIT=$(printf '%s\n' "$REMOTE_TAGS" | awk '$2 ~ /\^\{\}$/ {print $1; found=1} END {if (!found) {}}')
+          if [ -z "$REMOTE_TAG_COMMIT" ]; then
+            REMOTE_TAG_COMMIT=$(printf '%s\n' "$REMOTE_TAGS" | awk '$2 !~ /\^\{\}$/ {print $1}')
+          fi
+          test "$REMOTE_TAG_COMMIT" = "$EVENT_COMMIT"
+          mkdir -p dist
+          {
+            echo '## Install'
+            echo
+            echo 'Run from the root of your Git repository:'
+            echo
+            echo '```bash'
+            echo "curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/$EVENT_COMMIT/scripts/install.sh \\"
+            echo "  | sh -s -- --version $GITHUB_REF_NAME --commit $EVENT_COMMIT"
+            echo '```'
+            echo
+            echo "Immutable release commit: \`$EVENT_COMMIT\`"
+          } > dist/INSTALL.md
+          shasum -a 256 scripts/install.sh > dist/SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --verify-tag --target "$EVENT_COMMIT" --title "Lenny $GITHUB_REF_NAME" \
+            --notes-file dist/INSTALL.md dist/SHA256SUMS
