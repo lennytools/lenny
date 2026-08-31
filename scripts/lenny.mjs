@@ -28,6 +28,12 @@ try {
         source: resolve(options.source || scriptRoot),
         target,
         dryRun: Boolean(options['dry-run']),
+        provenance: {
+          sourceKind: options['source-kind'] || 'local-unverified',
+          repository: options.repository || '',
+          version: options.version || '',
+          commit: options.commit || '',
+        },
       }), options);
       break;
     case 'setup':
@@ -96,7 +102,7 @@ function listOption(value) {
 
 function validateOptions(commandName, options) {
   const schemas = {
-    install: ['source', 'target', 'dry-run', 'json', 'help'],
+    install: ['source', 'target', 'dry-run', 'source-kind', 'repository', 'version', 'commit', 'json', 'help'],
     setup: ['target', 'force', 'json', 'help'],
     doctor: ['target', 'deep', 'json', 'help'],
     risk: ['target', 'files', 'description', 'high', 'reviewed-commit', 'merge-base', 'json', 'help'],

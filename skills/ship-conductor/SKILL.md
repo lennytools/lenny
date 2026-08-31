@@ -135,15 +135,13 @@ If it errors, returns no ID or reports that the parent thread does not exist:
   different file;
 - never ask a fallback reviewer to convene another council.
 
-If neither native dispatch nor isolated CLI processes work, the council is
-unavailable and the run is blocked. Never write three pretend-independent voices
-inside the driver context.
+If both paths fail, the council is blocked. Never write three pretend-independent
+voices inside the driver context.
 
 Validate every finding against code before it gates. Fix validated blockers,
 re-run affected proof and reconvene only the affected seat plus consensus.
 
 ## Phase 4: release cutoff
-
 Apply the release-manager rule:
 
 - freeze the accepted design;
@@ -167,8 +165,10 @@ and prove the real callable interface instead.
 
 Do not use passing unit tests as a substitute for a runnable workflow.
 
-Update the outcome contract and conductor ledger with all Phase 0-5 results,
-commit the run state, and freeze that commit as `reviewedCommit`. Keep the
+Before freezing, write `.lenny/runs/<run-id>/GATE-CONTRACT.json` with each
+required deterministic gate's ID, kind, repository-relative cwd and exact argv.
+Update Phase 0-5 run state, commit it, and freeze that commit as
+`reviewedCommit`. Keep the
 contract `in_progress` and do not modify `.lenny/runs/<run-id>` again. Replay
 final risk, deterministic gates and required councils against that commit into
 `.lenny/evidence/<run-id>`. Earlier receipts are exploratory and cannot satisfy

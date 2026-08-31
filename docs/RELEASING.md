@@ -1,7 +1,8 @@
 # Releasing Lenny
 
 GitHub `main` is the canonical public source. A protected `v*` tag created from
-a reviewed `main` commit is the stable installation source. The release job
+a reviewed `main` commit selects a release; the immutable full commit is the
+installation trust anchor. The release job
 fails when the tagged commit is not reachable from canonical `main`. Enable
 GitHub immutable releases and a tag ruleset that forbids updating or deleting
 `v*` before publishing v0.1.0. Never advertise a mutable branch as stable.
@@ -28,23 +29,25 @@ GitHub immutable releases and a tag ruleset that forbids updating or deleting
 6. Merge through human review.
 7. Confirm immutable releases and the `v*` tag ruleset are enabled, then create
    and push `v<version>` from the reviewed `main` commit.
-8. GitHub Actions reruns the complete matrix and creates the GitHub release.
-9. Install once from the published tag and run Lenny Doctor.
+8. GitHub Actions reruns the complete matrix and creates the GitHub release with
+   an exact-commit install command and bootstrap checksum.
+9. Install once with the published exact-commit command and run Lenny Doctor.
 
 ## Updating a project
 
-Rerun the version-pinned installer with the desired tag. It atomically replaces
+Rerun the release page's commit-pinned installer. It atomically replaces
 only `.lenny/core` and the marked `AGENTS.md` routing block:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/v0.1.0/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/<RELEASE-COMMIT>/scripts/install.sh \
+  | sh -s -- --version v0.1.0 --commit <RELEASE-COMMIT>
 ```
 
 Preview first with `--dry-run`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/v0.1.0/scripts/install.sh \
-  | sh -s -- --dry-run
+curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/<RELEASE-COMMIT>/scripts/install.sh \
+  | sh -s -- --version v0.1.0 --commit <RELEASE-COMMIT> --dry-run
 ```
 
 Core updates never overwrite `.lenny/profile.md`, evidence or run history.

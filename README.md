@@ -28,22 +28,26 @@ top of your agent instead of a closed platform.
 
 ## Install
 
-Requires Git, Node.js 20 or newer and Codex on macOS or Linux. Run this from the
-root of an existing or new Git repository:
+Requires Git, Node.js 20 or newer and Codex on macOS or Linux. Open the desired
+[GitHub release](https://github.com/lennytools/lenny/releases), then copy its
+**Install** command. Every release publishes a command shaped like this:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/v0.1.0/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/<40-CHARACTER-RELEASE-COMMIT>/scripts/install.sh \
+  | sh -s -- --version v0.1.0 --commit <SAME-40-CHARACTER-RELEASE-COMMIT>
 ```
 
-The release tag is pinned. If you prefer to inspect downloaded code before
-execution:
+Both the first downloaded byte and the source it executes are bound to the same
+immutable commit; the semantic tag is only a human-readable release selector.
+If you prefer to inspect the bootstrap before execution, use the same commit
+from the release page:
 
 ```bash
 curl -fsSLo /tmp/lenny-install.sh \
-  https://raw.githubusercontent.com/lennytools/lenny/v0.1.0/scripts/install.sh
+  https://raw.githubusercontent.com/lennytools/lenny/<RELEASE-COMMIT>/scripts/install.sh
 less /tmp/lenny-install.sh
-sh /tmp/lenny-install.sh --dry-run
-sh /tmp/lenny-install.sh
+sh /tmp/lenny-install.sh --version v0.1.0 --commit <RELEASE-COMMIT> --dry-run
+sh /tmp/lenny-install.sh --version v0.1.0 --commit <RELEASE-COMMIT>
 ```
 
 The installer owns only `.lenny/core` and one visibly marked block in

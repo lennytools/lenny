@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -28,9 +28,31 @@ test('release automation pins actions and gates publication on the full compatib
     assert.match(workflow, /actions\/setup-node@[0-9a-f]{40}/);
   }
   const release = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
-  assert(release.includes('git merge-base --is-ancestor "$GITHUB_SHA" origin/main'));
+  assert(release.includes('git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main'));
   assert.match(release, /os:\s*\[ubuntu-latest, macos-latest\]/);
   assert.match(release, /node:\s*\[20, 22, 24\]/);
   assert.match(release, /publish:\n\s+needs: verify/);
   assert.equal((release.match(/gh release create/g) || []).length, 1);
+  assert(release.includes('raw.githubusercontent.com/lennytools/lenny/$RELEASE_COMMIT/scripts/install.sh'));
+  assert(release.includes('--commit $RELEASE_COMMIT'));
+  assert(release.includes('shasum -a 256 scripts/install.sh'));
+  const readme = readFileSync(join(root, 'README.md'), 'utf8');
+  assert(!readme.includes('raw.githubusercontent.com/lennytools/lenny/v0.1.0/scripts/install.sh'));
+  assert(readme.includes('--commit <SAME-40-CHARACTER-RELEASE-COMMIT>'));
+});
+
+test('public release excludes Bradley-specific council packs and company doctrine', () => {
+  const skillNames = readdirSync(join(root, 'skills'));
+  for (const privateSkill of ['gtm-council', 'entrepreneur-council', 'product-council']) {
+    assert(!skillNames.includes(privateSkill));
+  }
+  const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' });
+  assert.equal(tracked.status, 0, tracked.stderr);
+  const privateTerms = ['Bradley' + ' Miles', 'Avalon' + ' Labs', 'A' + 'IX'];
+  for (const path of tracked.stdout.split('\0').filter(Boolean)) {
+    const bytes = readFileSync(join(root, path));
+    if (bytes.includes(0)) continue;
+    const contents = bytes.toString('utf8');
+    assert(!privateTerms.some((term) => contents.includes(term)), `${path} contains private doctrine`);
+  }
 });

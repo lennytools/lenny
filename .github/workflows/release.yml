@@ -28,7 +28,9 @@ jobs:
       - name: Require release tag to come from canonical main
         run: |
           git fetch --no-tags origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          RELEASE_COMMIT=$(git rev-list -n 1 "$GITHUB_REF_NAME")
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+          git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
       - run: npm run check
       - run: node scripts/check-release.mjs "$GITHUB_REF_NAME"
 
@@ -44,4 +46,21 @@ jobs:
       - name: Create immutable GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "Lenny $GITHUB_REF_NAME"
+        run: |
+          RELEASE_COMMIT=$(git rev-list -n 1 "$GITHUB_REF_NAME")
+          mkdir -p dist
+          {
+            echo '## Install'
+            echo
+            echo 'Run from the root of your Git repository:'
+            echo
+            echo '```bash'
+            echo "curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/$RELEASE_COMMIT/scripts/install.sh \\"
+            echo "  | sh -s -- --version $GITHUB_REF_NAME --commit $RELEASE_COMMIT"
+            echo '```'
+            echo
+            echo "Immutable release commit: \`$RELEASE_COMMIT\`"
+          } > dist/INSTALL.md
+          shasum -a 256 scripts/install.sh > dist/SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Lenny $GITHUB_REF_NAME" \
+            --notes-file dist/INSTALL.md dist/SHA256SUMS

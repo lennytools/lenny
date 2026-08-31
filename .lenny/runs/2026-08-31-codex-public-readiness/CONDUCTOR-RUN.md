@@ -81,7 +81,7 @@ conduct work under a risk-adaptive, evidence-bound process.
 - Phase 0 ground truth: passed; public baseline, product boundary, finish bar and
   source-of-truth decision are recorded.
 - Phase 1 branch: passed, isolated worktree on `codex/public-install-v1`
-- Phase 2 build: implementation complete; current verification covers 24 tests,
+- Phase 2 build: implementation complete; current verification covers 28 tests,
   evidence-validator self-test, outcome-validator self-test, release metadata,
   syntax, YAML parse and whitespace checks.
 - Phase 3 councils: two blind review rounds completed. The first round found and
@@ -90,9 +90,9 @@ conduct work under a risk-adaptive, evidence-bound process.
   downgrade, default Doctor command execution, incomplete release-matrix gating
   and hand-written deterministic receipt defects.
 - Phase 4 cutoff: passed; no fast-follow scope entered the release.
-- Phase 5 green gate: passed at the frozen run-state commit. `npm run check`
-  passes 24 tests plus syntax, evidence, outcome, release and diff checks.
-- Phase 6 audits: pending against the frozen commit; final receipts will be
+- Phase 5 green gate: implementation checks pass; exact frozen-command replay
+  and a replacement stranger proof remain pending against the next reviewed tip.
+- Phase 6 audits: pending against that corrected frozen commit; final receipts will be
   written only under `.lenny/evidence/`.
 - Phase 7 merge-ready stop: pending public-branch evidence, push and interlock.
 
@@ -163,7 +163,7 @@ Kissinger verdict: material review findings were fixed rather than deferred.
 The remaining material test is an exact-tip stranger workflow and independent
 final audit; no additional feature belongs in this release.
 
-## Exact stranger proof
+## Superseded stranger proof and repair
 
 - A disposable non-empty Git repository installed and configured Lenny while
   preserving its original `AGENTS.md` instruction.
@@ -174,13 +174,14 @@ final audit; no additional feature belongs in this release.
   independent P0/P1 audit and done council passed.
 - The feature branch was pushed to its local bare remote at
   `163e154a9f25f069d965432e57ade7dd7c5c85eb`.
-- Independent replay printed `MERGE-READY INTERLOCK: PASS`; local HEAD equaled
-  upstream and the worktree was clean. Full receipt:
-  `.lenny/runs/2026-08-31-codex-public-readiness/STRANGER-PROOF.md`.
-- The run exposed one process defect: run-state files were added after the first
-  reviewed commit. Public Lenny now requires Phase 0-5 run state to be committed
-  and frozen first, then replays final gates against that exact commit. The
-  evidence self-test covers this ordering.
+- Independent replay initially printed `MERGE-READY INTERLOCK: PASS`; the final
+  high-stakes council then proved that the interlock accepted substituted
+  deterministic commands and a locally forged upstream. That proof is retained
+  as a defect-discovery record, not current acceptance evidence.
+- The repair binds exact commands and working directories in a reviewed gate
+  contract, queries the actual remote branch, pins remote installs to a full
+  commit, records provenance and excludes repository-only release tools from the
+  installed runtime. A new exact-tip stranger proof is required.
 
 ## Phase 5 freeze
 

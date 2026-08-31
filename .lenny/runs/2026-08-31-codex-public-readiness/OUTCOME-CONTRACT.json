@@ -44,14 +44,14 @@
       "text": "The public repository has semantic version metadata, release documentation and a tested update path while personal councils remain excluded.",
       "required": true,
       "status": "pass",
-      "evidence": ["VERSION", "CHANGELOG.md", "docs/RELEASING.md", "scripts/check-release.mjs", "tests/public-boundary.test.mjs"]
+      "evidence": ["VERSION", "CHANGELOG.md", "docs/RELEASING.md", "scripts/check-release.mjs", "tests/release.test.mjs"]
     },
     {
       "id": "C7",
       "text": "One temporary Codex-style repository completes the installed setup workflow end to end and is ready to conduct a plan to merge-ready.",
       "required": true,
-      "status": "pass",
-      "evidence": [".lenny/runs/2026-08-31-codex-public-readiness/STRANGER-PROOF.md"]
+      "status": "pending",
+      "evidence": []
     }
   ],
   "blockers": [],

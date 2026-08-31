@@ -21,6 +21,7 @@ if (!/^[0-9a-f]{40}$/.test(options['reviewed-commit'])) fail('reviewed commit mu
 
 const head = git(['rev-parse', 'HEAD']);
 if (head !== options['reviewed-commit']) fail('HEAD does not match the reviewed commit');
+const cwdPrefix = git(['rev-parse', '--show-prefix']).replace(/\/$/, '');
 
 const startedAt = new Date();
 const result = spawnSync(command[0], command.slice(1), {
@@ -42,6 +43,7 @@ const receipt = {
   verdict: exitCode === 0 ? 'PASS' : 'FAIL',
   exitCode,
   command,
+  cwd: cwdPrefix || '.',
   startedAt: startedAt.toISOString(),
   finishedAt: finishedAt.toISOString(),
   durationMs: finishedAt.getTime() - startedAt.getTime(),

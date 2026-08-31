@@ -14,6 +14,7 @@ const claimMergeReady = process.argv.includes('--claim-merge-ready');
 const manifestBytes = readFileSync(resolve(dir, 'manifest.json'));
 const manifest = JSON.parse(manifestBytes.toString('utf8'));
 const claimScope = manifest.claim?.scope;
+const deterministicKinds = new Set(['test', 'build', 'leak_scan', 'live_qa']);
 const realDir = realpathSync(dir);
 let repoRoot = null;
 for (const key of ['runId', 'reviewedCommit', 'mergeBase', 'diffSha256']) {
@@ -33,6 +34,8 @@ if (claimScope !== 'fleet') {
 }
 if (!Array.isArray(manifest.gates) || !manifest.gates.length) throw new Error('missing gates');
 if (!Array.isArray(manifest.findings)) throw new Error('missing findings inventory');
+const gateContract = claimScope === 'ship' ? loadGateContract() : null;
+if (gateContract) validateGateContract(gateContract, manifest.gates);
 for (const gate of manifest.gates) {
   if (!gate.id || !gate.artifact || !gate.sha256 || !gate.reviewedCommit) throw new Error('malformed gate');
   if (gate.required !== false && gate.status !== 'pass') throw new Error(`required gate not passed: ${gate.id}`);
@@ -40,7 +43,7 @@ for (const gate of manifest.gates) {
   const artifactBytes = artifact(gate.artifact, gate.id);
   const digest = createHash('sha256').update(artifactBytes).digest('hex');
   if (digest !== gate.sha256) throw new Error(`hash mismatch: ${gate.id}`);
-  validateGateReceipt(gate, artifactBytes, manifest.reviewedCommit);
+  validateGateReceipt(gate, artifactBytes, manifest.reviewedCommit, gateContract);
 }
 if (claimScope === 'ship') validateOutcomeGate();
 for (const finding of manifest.findings || []) {
@@ -108,7 +111,7 @@ if (claimMergeReady) {
       }
     }
     if (!passed('done_council').length) throw new Error('missing passing done council');
-    for (const kind of ['test', 'build', 'leak_scan', 'live_qa']) {
+    for (const kind of deterministicKinds) {
       if (!passed(kind).length) throw new Error(`missing passing ${kind} gate`);
     }
     const audits = passed('p0_p1_audit');
@@ -180,9 +183,7 @@ if (claimMergeReady) {
   let upstream;
   if (claim.scope !== 'fleet') {
     if (status.stdout.trim()) throw new Error('worktree must be clean for merge-ready claim');
-    head = gitText(['-C', repoRoot, 'rev-parse', 'HEAD']);
-    upstream = gitText(['-C', repoRoot, 'rev-parse', '@{upstream}']);
-    if (head !== upstream) throw new Error('local HEAD does not equal upstream HEAD');
+    ({ head, upstream } = verifyAdvertisedRemoteTip());
   }
   const receipt = {
     status: 'merge-ready',
@@ -221,7 +222,7 @@ function artifact(name, id) {
   return readFileSync(realFile);
 }
 
-function validateGateReceipt(gate, bytes, reviewedCommit) {
+function validateGateReceipt(gate, bytes, reviewedCommit, gateContract) {
   if (['child_receipt', 'lane_receipt', 'risk_classification', 'outcome_contract'].includes(gate.kind)) return;
   let receipt;
   try {
@@ -237,7 +238,7 @@ function validateGateReceipt(gate, bytes, reviewedCommit) {
   }
   const expectedVerdict = ['council', 'terminal_debate', 'done_council'].includes(gate.kind) ? 'GO' : 'PASS';
   if (receipt.verdict !== expectedVerdict) throw new Error(`gate receipt verdict is not ${expectedVerdict}: ${gate.id}`);
-  if (['test', 'build', 'leak_scan', 'live_qa'].includes(gate.kind)) {
+  if (deterministicKinds.has(gate.kind)) {
     if (receipt.recorder !== 'lenny-gate-runner@0.1.0'
         || !Array.isArray(receipt.command) || !receipt.command.length
         || receipt.command.some((item) => typeof item !== 'string' || !item)
@@ -245,10 +246,17 @@ function validateGateReceipt(gate, bytes, reviewedCommit) {
         || !Number.isInteger(receipt.durationMs) || receipt.durationMs < 0
         || !Number.isInteger(receipt.stdoutBytes) || receipt.stdoutBytes < 0
         || !Number.isInteger(receipt.stderrBytes) || receipt.stderrBytes < 0
+        || typeof receipt.cwd !== 'string' || !receipt.cwd
         || !Number.isFinite(Date.parse(receipt.startedAt))
         || !Number.isFinite(Date.parse(receipt.finishedAt))
         || Date.parse(receipt.finishedAt) < Date.parse(receipt.startedAt)) {
       throw new Error(`deterministic gate lacks a valid runner receipt: ${gate.id}`);
+    }
+    const contract = gateContract?.gates.find((item) => item.id === gate.id);
+    if (!contract || contract.kind !== gate.kind
+        || JSON.stringify(contract.command) !== JSON.stringify(receipt.command)
+        || contract.cwd !== receipt.cwd) {
+      throw new Error(`deterministic gate command contract mismatch: ${gate.id}`);
     }
   }
   if (gate.kind === 'p0_p1_audit') {
@@ -263,6 +271,61 @@ function validateGateReceipt(gate, bytes, reviewedCommit) {
   if (gate.kind === 'cross_vendor_unavailable' && receipt.attempts !== gate.attempts) {
     throw new Error(`cross-vendor receipt mismatch: ${gate.id}`);
   }
+}
+
+function loadGateContract() {
+  const path = `.lenny/runs/${manifest.runId}/GATE-CONTRACT.json`;
+  try {
+    return JSON.parse(gitBytes(['-C', repoRoot, 'show', `${manifest.reviewedCommit}:${path}`]).toString('utf8'));
+  } catch {
+    throw new Error(`frozen deterministic gate contract missing from reviewedCommit: ${path}`);
+  }
+}
+
+function validateGateContract(contract, gates) {
+  if (contract.schemaVersion !== 1 || !Array.isArray(contract.gates)) {
+    throw new Error('invalid deterministic gate contract');
+  }
+  const ids = new Set();
+  for (const item of contract.gates) {
+    if (!item || typeof item.id !== 'string' || !item.id || ids.has(item.id)
+        || !deterministicKinds.has(item.kind)
+        || typeof item.cwd !== 'string' || !item.cwd
+        || !Array.isArray(item.command) || !item.command.length
+        || item.command.some((value) => typeof value !== 'string' || !value)) {
+      throw new Error('invalid or duplicate deterministic gate contract entry');
+    }
+    ids.add(item.id);
+  }
+  const required = gates.filter((gate) => gate.required !== false && deterministicKinds.has(gate.kind));
+  const requiredIds = new Set(required.map((gate) => gate.id));
+  if (requiredIds.size !== required.length
+      || required.length !== contract.gates.length
+      || contract.gates.some((item) => !requiredIds.has(item.id))) {
+    throw new Error('deterministic gate contract does not match required manifest gates');
+  }
+}
+
+function verifyAdvertisedRemoteTip() {
+  const branch = gitText(['-C', repoRoot, 'symbolic-ref', '--quiet', '--short', 'HEAD']);
+  const remote = gitText(['-C', repoRoot, 'config', '--get', `branch.${branch}.remote`]);
+  const remoteRef = gitText(['-C', repoRoot, 'config', '--get', `branch.${branch}.merge`]);
+  if (!remote || remote === '.') throw new Error('merge-ready proof requires a real configured remote');
+  if (!remoteRef.startsWith('refs/heads/')) throw new Error('upstream is not a remote branch');
+  const result = spawnSync('git', ['-C', repoRoot, 'ls-remote', '--exit-code', '--heads', remote, remoteRef], {
+    encoding: 'utf8',
+    timeout: 15000,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  });
+  if (result.status !== 0) throw new Error('configured remote branch is unavailable');
+  const lines = result.stdout.trim().split('\n').filter(Boolean);
+  if (lines.length !== 1) throw new Error('configured remote branch did not resolve uniquely');
+  const [remoteSha, advertisedRef] = lines[0].split(/\s+/);
+  const head = gitText(['-C', repoRoot, 'rev-parse', 'HEAD']);
+  if (advertisedRef !== remoteRef || remoteSha !== head) {
+    throw new Error('local HEAD does not equal the branch advertised by its remote');
+  }
+  return { head, upstream: remoteSha };
 }
 
 function immutableOutcome(contract) {

@@ -30,7 +30,7 @@ const REQUIRED_SKILLS = [
   'release-manager',
 ];
 
-export async function installProject({ source, target, dryRun = false }) {
+export async function installProject({ source, target, dryRun = false, provenance = {} }) {
   const sourceRoot = resolve(source);
   const targetRoot = resolve(target);
   assertDirectory(sourceRoot, 'Lenny source');
@@ -39,8 +39,9 @@ export async function installProject({ source, target, dryRun = false }) {
   refuseSymlink(join(targetRoot, 'AGENTS.md'));
   const version = readText(join(sourceRoot, 'VERSION')).trim();
   const sourceSkills = sourcePath(sourceRoot, 'skills');
-  const sourceScripts = sourcePath(sourceRoot, 'scripts', 'bin');
-  const expectedFiles = expectedInstallFiles(sourceRoot, sourceSkills, sourceScripts, version);
+  const runtimeScripts = runtimeScriptSources(sourceRoot);
+  const installProvenance = normalizeProvenance(provenance, version);
+  const expectedFiles = expectedInstallFiles(sourceRoot, sourceSkills, runtimeScripts, version);
   for (const skill of REQUIRED_SKILLS) {
     if (!existsSync(join(sourceSkills, skill, 'SKILL.md'))) {
       throw new Error(`source is missing required skill: ${skill}`);
@@ -52,7 +53,8 @@ export async function installProject({ source, target, dryRun = false }) {
   const nextAgents = mergeManagedBlock(oldAgents?.toString('utf8') || '', managedAgentsBlock());
   const corePath = join(targetRoot, '.lenny', 'core');
   refuseSymlink(corePath);
-  const current = sameInstall(corePath, version, expectedFiles) && nextAgents === (oldAgents?.toString('utf8') || '');
+  const current = sameInstall(corePath, version, expectedFiles, installProvenance)
+    && nextAgents === (oldAgents?.toString('utf8') || '');
 
   if (dryRun) {
     return {
@@ -87,13 +89,17 @@ export async function installProject({ source, target, dryRun = false }) {
   try {
     mkdirSync(stageCore, { recursive: true });
     cpSync(sourceSkills, join(stageCore, 'skills'), { recursive: true, dereference: false });
-    cpSync(sourceScripts, join(stageCore, 'bin'), { recursive: true, dereference: false });
+    for (const [installedName, sourceFile] of Object.entries(runtimeScripts)) {
+      const destination = join(stageCore, 'bin', installedName);
+      mkdirSync(dirname(destination), { recursive: true });
+      cpSync(sourceFile, destination, { dereference: false });
+    }
     writeFileSync(join(stageCore, 'VERSION'), `${version}\n`);
     if (existsSync(join(sourceRoot, 'LICENSE'))) cpSync(join(sourceRoot, 'LICENSE'), join(stageCore, 'LICENSE'));
     writeFileSync(join(stageCore, 'install.json'), `${JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       version,
-      repository: 'https://github.com/lennytools/lenny',
+      ...installProvenance,
       managedRoot: '.lenny/core',
       files: fileHashes(stageCore, ['install.json']),
     }, null, 2)}\n`);
@@ -366,23 +372,59 @@ function sourcePath(root, sourceName, installedName = sourceName) {
   throw new Error(`source is missing ${sourceName}`);
 }
 
-function sameInstall(corePath, version, expectedFiles) {
+function sameInstall(corePath, version, expectedFiles, provenance) {
+  let manifest;
+  try {
+    manifest = JSON.parse(readText(join(corePath, 'install.json')));
+  } catch {
+    return false;
+  }
   return existsSync(join(corePath, 'VERSION'))
     && readText(join(corePath, 'VERSION')).trim() === version
-    && sameHashMap(fileHashes(corePath, ['install.json']), expectedFiles);
+    && sameHashMap(fileHashes(corePath, ['install.json']), expectedFiles)
+    && manifest.sourceKind === provenance.sourceKind
+    && manifest.repository === provenance.repository
+    && manifest.commit === provenance.commit;
 }
 
-function expectedInstallFiles(sourceRoot, sourceSkills, sourceScripts, version) {
+function expectedInstallFiles(sourceRoot, sourceSkills, runtimeScripts, version) {
   const result = {};
   for (const file of walkFiles(sourceSkills)) {
     result[join('skills', relative(sourceSkills, file))] = sha256(readFileSync(file));
   }
-  for (const file of walkFiles(sourceScripts)) {
-    result[join('bin', relative(sourceScripts, file))] = sha256(readFileSync(file));
+  for (const [installedName, file] of Object.entries(runtimeScripts)) {
+    result[join('bin', installedName)] = sha256(readFileSync(file));
   }
   result.VERSION = sha256(Buffer.from(`${version}\n`));
   if (existsSync(join(sourceRoot, 'LICENSE'))) result.LICENSE = sha256(readFileSync(join(sourceRoot, 'LICENSE')));
   return result;
+}
+
+function runtimeScriptSources(sourceRoot) {
+  return {
+    'lenny.mjs': sourcePath(sourceRoot, 'scripts/lenny.mjs', 'bin/lenny.mjs'),
+    'lib/lenny-core.mjs': sourcePath(sourceRoot, 'scripts/lib/lenny-core.mjs', 'bin/lib/lenny-core.mjs'),
+  };
+}
+
+function normalizeProvenance(provenance, version) {
+  const sourceKind = provenance.sourceKind || 'local-unverified';
+  if (!['release', 'local-unverified'].includes(sourceKind)) throw new Error('invalid installer source kind');
+  const commit = provenance.commit || '';
+  if (sourceKind === 'release' && !/^[0-9a-f]{40}$/.test(commit)) {
+    throw new Error('release installation requires an immutable commit');
+  }
+  if (sourceKind === 'release' && !provenance.repository) {
+    throw new Error('release installation requires its repository identity');
+  }
+  if (provenance.version && provenance.version.replace(/^v/, '') !== version) {
+    throw new Error('installer version does not match source VERSION');
+  }
+  return {
+    sourceKind,
+    repository: sourceKind === 'release' ? provenance.repository : '',
+    commit: sourceKind === 'release' ? commit : '',
+  };
 }
 
 function sameHashMap(left, right) {
@@ -395,7 +437,10 @@ function sameHashMap(left, right) {
 function verifyInstallIntegrity(corePath) {
   try {
     const manifest = JSON.parse(readText(join(corePath, 'install.json')));
-    if (manifest.schemaVersion !== 1 || !manifest.files || Array.isArray(manifest.files)) return false;
+    if (manifest.schemaVersion !== 2 || !manifest.files || Array.isArray(manifest.files)) return false;
+    if (!['release', 'local-unverified'].includes(manifest.sourceKind)) return false;
+    if (manifest.sourceKind === 'release'
+        && (!/^[0-9a-f]{40}$/.test(manifest.commit || '') || !manifest.repository)) return false;
     const actual = fileHashes(corePath, ['install.json']);
     const expectedNames = Object.keys(manifest.files).sort();
     const actualNames = Object.keys(actual).sort();

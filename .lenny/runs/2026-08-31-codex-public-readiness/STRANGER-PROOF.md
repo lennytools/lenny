@@ -1,5 +1,10 @@
 # Exact stranger workflow proof
 
+**Status: superseded defect-discovery artifact.** The final council demonstrated
+that the old interlock could accept substituted deterministic commands and a
+locally forged upstream. This record is not acceptance evidence for the repaired
+tip; a fresh stranger proof must replace it.
+
 Date: 2026-08-31
 
 Disposable repository: `/private/tmp/lenny-final-pAnNuD`

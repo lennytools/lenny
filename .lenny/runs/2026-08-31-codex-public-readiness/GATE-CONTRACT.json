@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "gates": [
+    {"id": "tests", "kind": "test", "cwd": ".", "command": ["npm", "run", "check"]},
+    {"id": "build", "kind": "build", "cwd": ".", "command": ["npm", "run", "check:syntax"]},
+    {"id": "leak-scan", "kind": "leak_scan", "cwd": ".", "command": ["node", "--test", "--test-name-pattern=public release excludes", "tests/release.test.mjs"]},
+    {"id": "live-qa", "kind": "live_qa", "cwd": ".", "command": ["node", "--test", "--test-name-pattern=public shell installer completes", "tests/lenny-cli.test.mjs"]}
+  ]
+}

@@ -49,6 +49,11 @@ test('installs into a non-empty project without changing user-authored content',
   assert.equal(instances(agents, MANAGED_END), 1);
   assert.equal(text(target, 'skills/custom/SKILL.md'), 'personal\n');
   assert.equal(text(target, '.lenny/core/VERSION').trim(), '0.1.0');
+  assert.equal(statSync(join(target, '.lenny/core/bin/lenny.mjs')).isFile(), true);
+  assert.equal(statSync(join(target, '.lenny/core/bin/lib/lenny-core.mjs')).isFile(), true);
+  assert.throws(() => statSync(join(target, '.lenny/core/bin/check-release.mjs')));
+  assert.throws(() => statSync(join(target, '.lenny/core/bin/install.sh')));
+  assert.equal(JSON.parse(text(target, '.lenny/core/install.json')).sourceKind, 'local-unverified');
 
   const installedHash = treeHash(join(target, '.lenny', 'core'));
   const agentsHash = sha256(readFileSync(join(target, 'AGENTS.md')));
@@ -71,6 +76,25 @@ test('doctor detects managed-core tampering and reinstall repairs it', async () 
   const repair = await installProject({ source, target });
   assert.equal(repair.changed, true);
   assert.equal((await doctorProject({ target, deep: false })).ok, true);
+});
+
+test('release installation records immutable source provenance', async () => {
+  const target = fixture();
+  const commit = 'a'.repeat(40);
+  await installProject({
+    source,
+    target,
+    provenance: {
+      sourceKind: 'release',
+      repository: 'https://github.com/lennytools/lenny.git',
+      version: 'v0.1.0',
+      commit,
+    },
+  });
+  const manifest = JSON.parse(text(target, '.lenny/core/install.json'));
+  assert.equal(manifest.sourceKind, 'release');
+  assert.equal(manifest.repository, 'https://github.com/lennytools/lenny.git');
+  assert.equal(manifest.commit, commit);
 });
 
 test('reinstall compares managed bytes with the trusted source, not a forged local manifest', async () => {
@@ -307,6 +331,57 @@ test('the public shell installer completes the Codex setup contract', () => {
   assert.equal(JSON.parse(doctor.stdout).ok, true);
   assert.equal(run('npm', ['run', 'test'], {}, target).status, 0);
   assert.equal(run('npm', ['run', 'build'], {}, target).status, 0);
+});
+
+test('remote installer executes only a commit that matches the requested release tag', () => {
+  const repository = mkdtempSync(join(tmpdir(), 'lenny-release-source-'));
+  const bare = `${repository}-bare.git`;
+  const target = mkdtempSync(join(tmpdir(), 'lenny-release-target-'));
+  created.push(repository, bare, target);
+  run('git', ['init', '-q'], {}, repository, true);
+  run('git', ['config', 'user.email', 'lenny@test.local'], {}, repository, true);
+  run('git', ['config', 'user.name', 'Lenny Test'], {}, repository, true);
+  mkdirSync(join(repository, 'scripts'), { recursive: true });
+  writeFileSync(join(repository, 'VERSION'), '0.1.0\n');
+  writeFileSync(join(repository, 'scripts/lenny.mjs'), `
+    import { mkdirSync, writeFileSync } from 'node:fs';
+    import { join } from 'node:path';
+    const args = process.argv.slice(2);
+    const target = args[args.indexOf('--target') + 1];
+    mkdirSync(join(target, '.lenny'), { recursive: true });
+    writeFileSync(join(target, '.lenny', 'executed.txt'), 'safe\\n');
+  `);
+  run('git', ['add', '.'], {}, repository, true);
+  run('git', ['commit', '-qm', 'safe release'], {}, repository, true);
+  const safeCommit = run('git', ['rev-parse', 'HEAD'], {}, repository, true).stdout.trim();
+  run('git', ['tag', 'v0.1.0'], {}, repository, true);
+  writeFileSync(join(repository, 'scripts/lenny.mjs'), "throw new Error('moved tag code executed');\n");
+  run('git', ['add', '.'], {}, repository, true);
+  run('git', ['commit', '-qm', 'moved tag'], {}, repository, true);
+  run('git', ['tag', '-f', 'v0.1.0'], {}, repository, true);
+  run('git', ['clone', '--bare', '-q', repository, bare], {}, source, true);
+
+  const mismatch = run('sh', [join(source, 'scripts/install.sh'), '--target', target,
+    '--version', 'v0.1.0', '--commit', safeCommit], { LENNY_REPOSITORY_URL: bare });
+  assert.notEqual(mismatch.status, 0);
+  assert(mismatch.stderr.includes('Could not download immutable Lenny commit')
+    || mismatch.stderr.includes('Release tag does not resolve to --commit'), mismatch.stderr);
+  assert.throws(() => statSync(join(target, '.lenny/executed.txt')));
+
+  run('git', ['--git-dir', bare, 'update-ref', 'refs/tags/v0.1.0', safeCommit], {}, source, true);
+  const exact = run('sh', [join(source, 'scripts/install.sh'), '--target', target,
+    '--version', 'v0.1.0', '--commit', safeCommit], { LENNY_REPOSITORY_URL: bare });
+  assert.equal(exact.status, 0, exact.stderr);
+  assert.equal(text(target, '.lenny/executed.txt'), 'safe\n');
+});
+
+test('remote installer refuses an unbound tag-only request before executing downloaded code', () => {
+  const target = fixture();
+  const result = run('sh', [join(source, 'scripts/install.sh'), '--target', target], {
+    LENNY_REPOSITORY_URL: '/does/not/matter.git',
+  });
+  assert.notEqual(result.status, 0);
+  assert(result.stderr.includes('requires --commit'));
 });
 
 test('public commands reject typos and unsupported mutating options', async () => {

@@ -37,6 +37,21 @@ writeFileSync(join(root, '.lenny/runs/example-run/OUTCOME-CONTRACT.json'),
   `${JSON.stringify(frozenOutcome, null, 2)}\n`);
 writeFileSync(join(root, '.lenny/runs/example-run/CONDUCTOR-RUN.md'),
   '# Frozen before final review\n');
+const gateCommands = {
+  tests: [process.execPath, '-e', "if (!require('node:fs').existsSync('code.txt')) process.exit(1)"],
+  build: [process.execPath, '-e', "if (require('node:fs').readFileSync('code.txt','utf8') !== 'reviewed\\n') process.exit(1)"],
+  'leak-scan': [process.execPath, '-e', "if (require('node:fs').readFileSync('code.txt','utf8').includes('SECRET=')) process.exit(1)"],
+  'live-qa': [process.execPath, '-e', "if (!require('node:fs').readFileSync('code.txt','utf8').startsWith('reviewed')) process.exit(1)"],
+};
+writeFileSync(join(root, '.lenny/runs/example-run/GATE-CONTRACT.json'), `${JSON.stringify({
+  schemaVersion: 1,
+  gates: [
+    { id: 'tests', kind: 'test', cwd: '.', command: gateCommands.tests },
+    { id: 'build', kind: 'build', cwd: '.', command: gateCommands.build },
+    { id: 'leak-scan', kind: 'leak_scan', cwd: '.', command: gateCommands['leak-scan'] },
+    { id: 'live-qa', kind: 'live_qa', cwd: '.', command: gateCommands['live-qa'] },
+  ],
+}, null, 2)}\n`);
 run('git', ['add', 'code.txt', '.lenny/runs']);
 run('git', ['commit', '-qm', 'reviewed']);
 const reviewedCommit = run('git', ['rev-parse', 'HEAD']);
@@ -61,7 +76,7 @@ const gate = (id, kind, extra = {}) => {
       '--kind', kind,
       '--reviewed-commit', reviewedCommit,
       '--output', join(dir, artifactName),
-      '--', process.execPath, '-e', 'process.exit(0)'],
+      '--', ...(gateCommands[id] || [])],
     { cwd: root, encoding: 'utf8' });
     if (result.status !== 0) throw new Error(result.stderr || `gate runner failed: ${id}`);
     artifact = readFileSync(join(dir, artifactName));
@@ -141,6 +156,34 @@ if (handWritten.status === 0 || !handWritten.stderr.includes('lacks a valid runn
 writeFileSync(join(dir, handWrittenManifest.gates[0].artifact), originalTestArtifact);
 writeFileSync(join(dir, 'manifest.json'), originalManifest);
 
+const substitutedReceipt = JSON.parse(originalTestArtifact.toString('utf8'));
+substitutedReceipt.command = [process.execPath, '-e', 'process.exit(0)'];
+const substitutedBytes = Buffer.from(`${JSON.stringify(substitutedReceipt, null, 2)}\n`);
+const substitutedManifest = JSON.parse(originalManifest);
+substitutedManifest.gates[0].sha256 = createHash('sha256').update(substitutedBytes).digest('hex');
+writeFileSync(join(dir, substitutedManifest.gates[0].artifact), substitutedBytes);
+writeFileSync(join(dir, 'manifest.json'), JSON.stringify(substitutedManifest));
+const substituted = spawnSync('node', [validator, dir], { cwd: root, encoding: 'utf8' });
+if (substituted.status === 0 || !substituted.stderr.includes('command contract mismatch')) {
+  throw new Error('validator accepted a substituted passing command');
+}
+writeFileSync(join(dir, substitutedManifest.gates[0].artifact), originalTestArtifact);
+writeFileSync(join(dir, 'manifest.json'), originalManifest);
+
+const wrongCwdReceipt = JSON.parse(originalTestArtifact.toString('utf8'));
+wrongCwdReceipt.cwd = 'nested';
+const wrongCwdBytes = Buffer.from(`${JSON.stringify(wrongCwdReceipt, null, 2)}\n`);
+const wrongCwdManifest = JSON.parse(originalManifest);
+wrongCwdManifest.gates[0].sha256 = createHash('sha256').update(wrongCwdBytes).digest('hex');
+writeFileSync(join(dir, wrongCwdManifest.gates[0].artifact), wrongCwdBytes);
+writeFileSync(join(dir, 'manifest.json'), JSON.stringify(wrongCwdManifest));
+const wrongCwd = spawnSync('node', [validator, dir], { cwd: root, encoding: 'utf8' });
+if (wrongCwd.status === 0 || !wrongCwd.stderr.includes('command contract mismatch')) {
+  throw new Error('validator accepted a deterministic gate run from the wrong directory');
+}
+writeFileSync(join(dir, wrongCwdManifest.gates[0].artifact), originalTestArtifact);
+writeFileSync(join(dir, 'manifest.json'), originalManifest);
+
 const failedReceipt = JSON.parse(originalTestArtifact.toString('utf8'));
 failedReceipt.verdict = 'FAIL';
 failedReceipt.exitCode = 1;
@@ -194,7 +237,24 @@ run('git', ['commit', '-qm', 'attest evidence']);
 run('node', [validator, dir]);
 const remote = `${root}-remote.git`;
 run('git', ['init', '--bare', '-q', remote]);
+const branch = run('git', ['branch', '--show-current']);
+run('git', ['update-ref', 'refs/heads/spoof-local', 'HEAD']);
+run('git', ['config', `branch.${branch}.remote`, '.']);
+run('git', ['config', `branch.${branch}.merge`, 'refs/heads/spoof-local']);
+const spoofedLocal = spawnSync('node', [validator, dir, '--claim-merge-ready'], { cwd: root, encoding: 'utf8' });
+if (spoofedLocal.status === 0 || !spoofedLocal.stderr.includes('real configured remote')) {
+  throw new Error('interlock accepted a local branch as a pushed upstream');
+}
+run('git', ['config', '--unset-all', `branch.${branch}.remote`]);
+run('git', ['config', '--unset-all', `branch.${branch}.merge`]);
 run('git', ['remote', 'add', 'origin', remote]);
+run('git', ['update-ref', `refs/remotes/origin/${branch}`, 'HEAD']);
+run('git', ['config', `branch.${branch}.remote`, 'origin']);
+run('git', ['config', `branch.${branch}.merge`, `refs/heads/${branch}`]);
+const forgedTracking = spawnSync('node', [validator, dir, '--claim-merge-ready'], { cwd: root, encoding: 'utf8' });
+if (forgedTracking.status === 0 || !forgedTracking.stderr.includes('remote branch is unavailable')) {
+  throw new Error('interlock accepted a forged local remote-tracking ref');
+}
 run('git', ['push', '-qu', 'origin', 'HEAD']);
 const receipt = run('node', [validator, dir, '--claim-merge-ready']);
 if (!receipt.includes('MERGE-READY INTERLOCK: PASS')) throw new Error('missing interlock receipt');
@@ -266,7 +326,7 @@ const missingLiveQa = JSON.parse(validManifest);
 missingLiveQa.gates = missingLiveQa.gates.filter((item) => item.kind !== 'live_qa');
 writeFileSync(manifestPath, JSON.stringify(missingLiveQa));
 const noLiveQa = spawnSync('node', [validator, dir, '--claim-merge-ready'], { cwd: root, encoding: 'utf8' });
-if (noLiveQa.status === 0 || !noLiveQa.stderr.includes('missing passing live_qa gate')) {
+if (noLiveQa.status === 0 || !noLiveQa.stderr.includes('gate contract does not match')) {
   throw new Error('interlock accepted missing live QA');
 }
 writeFileSync(manifestPath, validManifest);
@@ -394,6 +454,18 @@ frozenRiskOutcome.lockHash = outcomeLock(frozenRiskOutcome);
 mkdirSync(join(riskRoot, '.lenny/runs/risk-downgrade'), { recursive: true });
 writeFileSync(join(riskRoot, '.lenny/runs/risk-downgrade/OUTCOME-CONTRACT.json'),
   `${JSON.stringify(frozenRiskOutcome, null, 2)}\n`);
+const riskGateCommands = Object.fromEntries([
+  ['tests', 'test'], ['build', 'build'], ['leak-scan', 'leak_scan'], ['live-qa', 'live_qa'],
+].map(([id]) => [id, [process.execPath, '-e', `if (!require('node:fs').existsSync('scripts/install.sh')) process.exit(1)`]]));
+writeFileSync(join(riskRoot, '.lenny/runs/risk-downgrade/GATE-CONTRACT.json'), `${JSON.stringify({
+  schemaVersion: 1,
+  gates: [
+    { id: 'tests', kind: 'test', cwd: '.', command: riskGateCommands.tests },
+    { id: 'build', kind: 'build', cwd: '.', command: riskGateCommands.build },
+    { id: 'leak-scan', kind: 'leak_scan', cwd: '.', command: riskGateCommands['leak-scan'] },
+    { id: 'live-qa', kind: 'live_qa', cwd: '.', command: riskGateCommands['live-qa'] },
+  ],
+}, null, 2)}\n`);
 riskRun('git', ['add', 'scripts/install.sh', '.lenny/runs']);
 riskRun('git', ['commit', '-qm', 'installer change']);
 const riskReviewedCommit = riskRun('git', ['rev-parse', 'HEAD']);
@@ -411,7 +483,7 @@ const addRiskGate = (id, kind, extra = {}) => {
       '--gate-id', id, '--kind', kind,
       '--reviewed-commit', riskReviewedCommit,
       '--output', join(riskDir, artifactName),
-      '--', process.execPath, '-e', 'process.exit(0)'],
+      '--', ...(riskGateCommands[id] || [])],
     { cwd: riskRoot, encoding: 'utf8' });
     if (result.status !== 0) throw new Error(result.stderr || `risk gate runner failed: ${id}`);
     bytes = readFileSync(join(riskDir, artifactName));
@@ -444,7 +516,8 @@ const downgradedRiskBytes = Buffer.from(`${JSON.stringify({
   mergeBase: riskMergeBase,
   description: '',
   forceHigh: false,
-  files: ['.lenny/runs/risk-downgrade/OUTCOME-CONTRACT.json', 'scripts/install.sh'],
+  files: ['.lenny/runs/risk-downgrade/GATE-CONTRACT.json',
+    '.lenny/runs/risk-downgrade/OUTCOME-CONTRACT.json', 'scripts/install.sh'],
   triggers: [],
 }, null, 2)}\n`);
 writeFileSync(join(riskDir, 'risk.json'), downgradedRiskBytes);

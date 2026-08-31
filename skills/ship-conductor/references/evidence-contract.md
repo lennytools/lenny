@@ -22,7 +22,11 @@ SHA-256. Except for risk, outcome contracts and child/lane dependency receipts,
 every artifact is a machine-readable JSON receipt with `schemaVersion: 1`, matching `gateId`,
 `kind`, `reviewedCommit`, `exitCode: 0` and a parsed `verdict`. Run tests,
 builds, leak scans and live QA through `scripts/run-gate.mjs`; those receipts
-contain the exact argv, real process exit, timing and output digest.
+contain the exact argv, repository-relative working directory, real process
+exit, timing and output digest. Before selecting `reviewedCommit`, freeze those
+commands in `.lenny/runs/<run-id>/GATE-CONTRACT.json`. The validator reads that
+contract from the reviewed Git commit and requires one-to-one identity with the
+required deterministic receipts; a different passing command is not evidence.
 Councils use `verdict: GO`; audits use `verdict: PASS`, `openP0: 0`,
 `openP1: 0` and matching reviewer/vendor identity. A manifest may not relabel a
 failed or narrative-only artifact as passing. Track the manifest and every
@@ -61,8 +65,9 @@ distinct reviewers, a `terminal_debate` and one audit from a vendor different
 from `claim.drivingVendor`. The high-stakes reference defines the bounded waiver.
 
 No validated P0/P1 finding may remain open. Code may not change after
-`reviewedCommit`. At strict closeout, the worktree must be clean and local `HEAD`
-must equal its upstream.
+`reviewedCommit`. At strict closeout, the worktree must be clean and the actual
+configured remote branch, queried with `git ls-remote`, must advertise local
+`HEAD`. A local tracking ref alone is not remote proof.
 
 The final closeout commit contains `.lenny/evidence/<run-id>` only. Phase 0-5
 run state under `.lenny/runs/<run-id>` must already be frozen in

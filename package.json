@@ -11,7 +11,7 @@
     "test": "node --test tests/*.test.mjs",
     "test:evidence": "node skills/ship-conductor/scripts/validate-evidence.test.mjs",
     "test:outcome": "node skills/outcome-lock/scripts/validate-outcome.mjs --self-test",
-    "check:syntax": "node --check scripts/lenny.mjs && node --check scripts/lib/lenny-core.mjs && node --check scripts/check-release.mjs && node --check skills/ship-conductor/scripts/run-gate.mjs && node --check skills/ship-conductor/scripts/risk-policy.mjs",
+    "check:syntax": "node --check scripts/lenny.mjs && node --check scripts/lib/lenny-core.mjs && node --check scripts/check-release.mjs && node --check skills/ship-conductor/scripts/run-gate.mjs && node --check skills/ship-conductor/scripts/risk-policy.mjs && node --check skills/ship-conductor/scripts/validate-evidence.mjs",
     "check": "npm run check:syntax && npm test && npm run test:evidence && npm run test:outcome && node scripts/check-release.mjs && git diff --check"
   },
   "license": "MIT"
