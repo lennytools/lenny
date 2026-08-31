@@ -95,6 +95,12 @@ test('reinstall repairs malformed install manifest metadata', async () => {
   assert.equal(repaired.changed, true);
   const healthy = await doctorProject({ target });
   assert.equal(healthy.ok, true, JSON.stringify(healthy.checks, null, 2));
+  const repairedManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  repairedManifest.files.VERSION = '0'.repeat(64);
+  writeFileSync(manifestPath, `${JSON.stringify(repairedManifest, null, 2)}\n`);
+  assert.equal((await doctorProject({ target })).ok, false);
+  assert.equal((await installProject({ source, target })).changed, true);
+  assert.equal((await doctorProject({ target })).ok, true);
 });
 
 test('release installation records immutable source provenance', async () => {
