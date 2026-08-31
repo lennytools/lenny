@@ -9,7 +9,11 @@ export const RISK_TRIGGER_PATTERNS = [
 ];
 
 export function evaluateRisk({ files = [], description = '', forceHigh = false }) {
-  const haystack = [...files, description].join('\n').toLowerCase();
+  const haystack = [...files, description]
+    .join('\n')
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .toLowerCase();
   const triggers = RISK_TRIGGER_PATTERNS
     .filter(([, pattern]) => pattern.test(haystack))
     .map(([label]) => label);

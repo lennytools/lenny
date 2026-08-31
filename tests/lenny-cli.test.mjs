@@ -351,7 +351,9 @@ test('risk selection is deterministic and fails upward', async () => {
   assert.equal(installer.riskClass, 'high-stakes');
   assert(installer.triggers.includes('installer or package supply chain'));
   for (const path of ['src/password-reset.js', 'src/passwordReset.js', 'src/jwt.js', 'src/jwtVerifier.js',
-    'src/api-key-store.js', 'src/apiKeyStore.js', 'src/access-control.js', 'src/accessControl.js']) {
+    'src/api-key-store.js', 'src/apiKeyStore.js', 'src/access-control.js', 'src/accessControl.js',
+    'src/authService.js', 'src/oauthCallback.js', 'src/loginHandler.js', 'src/sessionStore.js',
+    'src/permissionGuard.js', 'src/rbacPolicy.js', 'src/aclManager.js']) {
     const auth = await classifyRisk({ target, files: [path] });
     assert.equal(auth.riskClass, 'high-stakes', path);
     assert(auth.triggers.includes('authentication or authorization'), path);
