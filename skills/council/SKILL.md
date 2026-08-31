@@ -38,6 +38,27 @@ Seats can be **role lenses** ("the security reviewer") or **embodied personas**
 ("a veteran operator who has run this in production"). Both work; the honesty rail
 below governs personas.
 
+## Isolation ladder (Codex)
+
+Blind seats require separate model contexts, not three headings written by the
+driver. Before Round 1, probe the live host once:
+
+1. Use native Codex subagents when one test dispatch succeeds and returns a real
+   task identifier.
+2. If the dispatch errors, returns no task identifier or reports that the parent
+   thread does not exist, **do not wait on it and do not retry it**. Immediately
+   run one fresh `codex exec --ephemeral` process per seat against the same frozen
+   commit. Give each process only the common evidence packet plus that seat's
+   lens, write each raw output to a different file and wait for all process exit
+   codes before cross-critique.
+3. Verify `codex --version` and `codex login status` before using the CLI fallback.
+   If either fails, mark the independent council unavailable and stop. Never
+   manufacture blind agreement inside the driver context.
+
+The fallback is still Codex-first. It changes process isolation, not the
+reviewer vendor. Never recursively ask a fallback reviewer to convene another
+council.
+
 A neutral worked example (a generic code-review council) ships in
 `references/example-code-review-council.md` - copy it and swap the seats for yours.
 

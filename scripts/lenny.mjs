@@ -16,6 +16,10 @@ const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const target = resolve(options.target || process.cwd());
 
 try {
+  if (options.help) {
+    help(command);
+    process.exit(0);
+  }
   switch (command) {
     case 'install':
       print(await installProject({
@@ -72,7 +76,7 @@ function parseOptions(args) {
     const item = args.shift();
     if (!item.startsWith('--')) throw new Error(`unexpected argument: ${item}`);
     const key = item.slice(2);
-    if (['dry-run', 'force', 'json', 'high'].includes(key)) {
+    if (['dry-run', 'force', 'json', 'high', 'help'].includes(key)) {
       result[key] = true;
     } else {
       if (!args.length) throw new Error(`${item} requires a value`);
@@ -106,6 +110,18 @@ async function installedVersion(targetPath, fallbackRoot) {
   throw new Error('Lenny version is not installed');
 }
 
-function help() {
-  console.log(`Lenny\n\nUsage:\n  lenny.mjs install --source PATH [--target PATH] [--dry-run]\n  lenny.mjs setup [--target PATH] [--force]\n  lenny.mjs doctor [--target PATH] [--json]\n  lenny.mjs risk [--target PATH] [--files a,b] [--description TEXT] [--high]\n  lenny.mjs uninstall [--target PATH] [--dry-run]\n  lenny.mjs version [--target PATH]\n\nAfter installation, run:\n  node .lenny/core/bin/lenny.mjs setup\n  node .lenny/core/bin/lenny.mjs doctor`);
+function help(commandName) {
+  const commands = {
+    install: 'lenny.mjs install --source PATH [--target PATH] [--dry-run]',
+    setup: 'lenny.mjs setup [--target PATH] [--force]',
+    doctor: 'lenny.mjs doctor [--target PATH] [--json] [--deep false]',
+    risk: 'lenny.mjs risk [--target PATH] [--files a,b] [--description TEXT] [--high] [--json]',
+    uninstall: 'lenny.mjs uninstall [--target PATH] [--dry-run]',
+    version: 'lenny.mjs version [--target PATH]',
+  };
+  if (commandName && commands[commandName]) {
+    console.log(`Lenny ${commandName}\n\nUsage:\n  ${commands[commandName]}\n\nRun lenny.mjs help to see every command.`);
+    return;
+  }
+  console.log(`Lenny\n\nUsage:\n  ${Object.values(commands).join('\n  ')}\n\nEvery command accepts --help.\n\nAfter installation, run:\n  node .lenny/core/bin/lenny.mjs setup\n  node .lenny/core/bin/lenny.mjs doctor`);
 }

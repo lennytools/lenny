@@ -189,6 +189,11 @@ Never build on assumed ground truth.
 
 - **Attended** (the user is present/steering): execute the slices **directly**,
   one at a time, in the session - the user watches each slice land.
+- **Codex isolation preflight:** probe one native subagent before depending on
+  completion wakeups. If dispatch fails or returns no task identifier, do not
+  call wait on the failed task. Continue ordinary build slices directly and use
+  the Council skill's separate ephemeral Codex processes for gates that require
+  independent contexts. Record the host limitation in the ledger.
 - **Unattended - PRIMARY: event-driven subagent orchestration.** Decompose the
   current slice or wave into well-scoped subagent tasks and
   dispatch them as **background subagents** (parallel where independent). Each
@@ -710,4 +715,6 @@ fallback in the audit record.
 must not invent blind seats from the driver's own reasoning. Use separate
 clean-context CLI processes when native subagents are unavailable (for Codex,
 separate ephemeral `codex exec` calls), preserve each raw output, and mark the
-council unavailable if isolation cannot be established.
+council unavailable if isolation cannot be established. A failed native spawn
+is final for that run: never wait on it, retry it or treat its missing completion
+as work in flight.

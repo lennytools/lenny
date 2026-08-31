@@ -63,6 +63,12 @@ Council and runs Doctor. Verify at any time:
 node .lenny/core/bin/lenny.mjs doctor
 ```
 
+Every command supports local help without changing the repository:
+
+```bash
+node .lenny/core/bin/lenny.mjs doctor --help
+```
+
 Preview an update by rerunning the desired pinned installer with `--dry-run`.
 Uninstall only the managed core and routing block with:
 

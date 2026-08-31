@@ -173,6 +173,16 @@ test('the public shell installer completes the Codex setup contract', () => {
   assert.equal(run('npm', ['run', 'build'], {}, target).status, 0);
 });
 
+test('every public command has non-destructive help', () => {
+  const cli = join(source, 'scripts', 'lenny.mjs');
+  for (const command of ['install', 'setup', 'doctor', 'risk', 'uninstall', 'version']) {
+    const result = run(process.execPath, [cli, command, '--help']);
+    assert.equal(result.status, 0, `${command}: ${result.stderr}`);
+    assert(result.stdout.includes(`Lenny ${command}`));
+    assert(result.stdout.includes('Usage:'));
+  }
+});
+
 function fixture({ nodeProject = false } = {}) {
   const target = mkdtempSync(join(tmpdir(), 'lenny-project-'));
   created.push(target);
