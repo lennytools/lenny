@@ -336,10 +336,13 @@ test('every public command has non-destructive help', () => {
 test('the public conductor stays compact and installs phase-specific references', async () => {
   const conductor = readFileSync(join(source, 'skills/ship-conductor/SKILL.md'), 'utf8');
   assert(conductor.split('\n').length <= 250, 'public conductor exceeded the 250-line startup budget');
+  assert(conductor.includes('Do not add `.lenny/runs/` to the evidence commit.'));
   const target = fixture();
   await installProject({ source, target });
-  assert.equal(text(target, '.lenny/core/skills/ship-conductor/references/evidence-contract.md')
-    .includes('# Evidence Contract'), true);
+  const evidenceContract = text(target,
+    '.lenny/core/skills/ship-conductor/references/evidence-contract.md');
+  assert.equal(evidenceContract.includes('# Evidence Contract'), true);
+  assert.equal(evidenceContract.includes('The final closeout commit contains'), true);
   assert.equal(text(target, '.lenny/core/skills/ship-conductor/references/high-stakes-audit.md')
     .includes('# High-Stakes Audit'), true);
 });

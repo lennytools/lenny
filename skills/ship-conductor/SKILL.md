@@ -48,6 +48,10 @@ root while developing Lenny itself.
 - Create `.lenny/runs/<run-id>/OUTCOME-CONTRACT.json` with Outcome Lock.
 - Create `.lenny/runs/<run-id>/CONDUCTOR-RUN.md`. Keep it current after every
   phase so another context can resume from disk.
+- Treat `.lenny/runs/<run-id>` as active bookkeeping. If the project tracks it,
+  commit it before the final reviewed commit; otherwise leave it local. Never
+  add run-state files after `reviewedCommit`, because the strict interlock must
+  treat every non-evidence change as unreviewed code.
 - Freeze `Must ship now / Fast follow / Not doing`. New ideas default to fast
   follow unless the accepted path cannot work without them.
 
@@ -200,7 +204,8 @@ Read `references/evidence-contract.md`. Create the evidence bundle under
 `.lenny/evidence/<run-id>`, hash every gate artifact and bind it to the exact
 reviewed commit. Record deterministic tests, builds, leak scans and live QA with
 the referenced gate runner rather than writing pass receipts by hand. Commit the
-evidence, push the branch when authorized and verify local `HEAD` equals upstream.
+evidence directory only, push the branch when authorized and verify local `HEAD`
+equals upstream. Do not add `.lenny/runs/` to the evidence commit.
 
 The phrase `merge-ready` is forbidden until this exits `0`:
 
