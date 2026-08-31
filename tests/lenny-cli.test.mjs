@@ -337,8 +337,9 @@ test('the public conductor stays compact and installs phase-specific references'
   const conductor = readFileSync(join(source, 'skills/ship-conductor/SKILL.md'), 'utf8');
   assert(conductor.split('\n').length <= 250, 'public conductor exceeded the 250-line startup budget');
   assert(conductor.includes('Do not add `.lenny/runs/` to the evidence commit.'));
-  assert(conductor.includes('Do not modify\n`.lenny/runs/<run-id>` after this point.'));
+  assert(conductor.includes('do not modify `.lenny/runs/<run-id>` again.'));
   assert(conductor.includes('Earlier receipts are exploratory and cannot satisfy'));
+  assert(conductor.includes('required `outcome_contract`\ngate'));
   const target = fixture();
   await installProject({ source, target });
   const evidenceContract = text(target,
@@ -346,6 +347,7 @@ test('the public conductor stays compact and installs phase-specific references'
   assert.equal(evidenceContract.includes('# Evidence Contract'), true);
   assert.equal(evidenceContract.includes('must already be frozen in'), true);
   assert.equal(evidenceContract.includes('receipt must be produced or replayed'), true);
+  assert.equal(evidenceContract.includes('Keep the reviewed run-state outcome contract'), true);
   assert.equal(text(target, '.lenny/core/skills/ship-conductor/references/high-stakes-audit.md')
     .includes('# High-Stakes Audit'), true);
 });

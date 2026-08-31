@@ -18,8 +18,8 @@ Every gate has:
 - `reviewerId` and `vendor` for an audit.
 
 All artifacts must be regular files inside the bundle and match their declared
-SHA-256. Except for risk and child/lane dependency receipts, every artifact is a
-machine-readable JSON receipt with `schemaVersion: 1`, matching `gateId`,
+SHA-256. Except for risk, outcome contracts and child/lane dependency receipts,
+every artifact is a machine-readable JSON receipt with `schemaVersion: 1`, matching `gateId`,
 `kind`, `reviewedCommit`, `exitCode: 0` and a parsed `verdict`. Run tests,
 builds, leak scans and live QA through `scripts/run-gate.mjs`; those receipts
 contain the exact argv, real process exit, timing and output digest.
@@ -46,6 +46,7 @@ node .lenny/core/skills/ship-conductor/scripts/run-gate.mjs \
 
 All Ship claims require passing:
 
+- exactly one final `outcome_contract`;
 - exactly one `risk_classification` gate when `claim.riskClass` is declared;
 - at least one `test`;
 - at least one `build`;
@@ -70,6 +71,12 @@ evidence stale; do not rebind a review merely to repair commit ordering.
 Every required gate, council and audit receipt must be produced or replayed
 against that frozen commit. A receipt from before the run-state freeze is stale
 even when the product files did not change.
+
+Keep the reviewed run-state outcome contract `in_progress`. Put the final
+completed copy at `.lenny/evidence/<run-id>/OUTCOME-CONTRACT.json`, preserving
+its immutable outcome, criteria and lock hash. Validate it with Outcome Lock's
+`--claim-complete` flag and include it as the one required `outcome_contract`
+gate. The strict interlock compares it with the copy in `reviewedCommit`.
 
 Run the validator first without a claim to diagnose the bundle, then run the
 strict interlock:

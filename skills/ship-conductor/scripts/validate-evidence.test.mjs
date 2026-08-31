@@ -14,13 +14,27 @@ const run = (cmd, args) => {
   if (out.status !== 0) throw new Error(out.stderr || `${cmd} failed`);
   return out.stdout.trim();
 };
+const outcomeLock = (contract) => `sha256:${createHash('sha256').update(JSON.stringify({
+  originalOutcome: contract.originalOutcome,
+  criteria: contract.criteria.map(({ id, text, required = true }) => ({ id, text, required })),
+})).digest('hex')}`;
 run('git', ['init', '-q']);
 run('git', ['config', 'user.email', 'lenny@test.local']);
 run('git', ['config', 'user.name', 'Lenny Test']);
 writeFileSync(join(root, 'code.txt'), 'reviewed\n');
 mkdirSync(join(root, '.lenny/runs/example-run'), { recursive: true });
+const frozenOutcome = {
+  version: 1,
+  originalOutcome: 'A user can run the reviewed example',
+  status: 'in_progress',
+  criteria: [{ id: 'C1', text: 'The example is merge-ready', required: true,
+    status: 'pending', evidence: [] }],
+  blockers: [],
+  scopeChanges: [],
+};
+frozenOutcome.lockHash = outcomeLock(frozenOutcome);
 writeFileSync(join(root, '.lenny/runs/example-run/OUTCOME-CONTRACT.json'),
-  '{"status":"complete","criteria":[]}\n');
+  `${JSON.stringify(frozenOutcome, null, 2)}\n`);
 writeFileSync(join(root, '.lenny/runs/example-run/CONDUCTOR-RUN.md'),
   '# Frozen before final review\n');
 run('git', ['add', 'code.txt', '.lenny/runs']);
@@ -31,6 +45,12 @@ if (reviewedDiff.status !== 0) throw new Error('cannot hash reviewed diff');
 const diffSha256 = createHash('sha256').update(reviewedDiff.stdout).digest('hex');
 const dir = join(root, '.lenny/evidence/example-run');
 mkdirSync(dir, { recursive: true });
+const finalOutcome = structuredClone(frozenOutcome);
+finalOutcome.status = 'complete';
+finalOutcome.criteria[0].status = 'pass';
+finalOutcome.criteria[0].evidence = ['tests.json', 'live-qa.json'];
+const finalOutcomeBytes = Buffer.from(`${JSON.stringify(finalOutcome, null, 2)}\n`);
+writeFileSync(join(dir, 'OUTCOME-CONTRACT.json'), finalOutcomeBytes);
 const gate = (id, kind, extra = {}) => {
   const verdict = ['council', 'terminal_debate', 'done_council'].includes(kind) ? 'GO' : 'PASS';
   const artifactName = `${id}.json`;
@@ -72,6 +92,9 @@ const gates = [
   gate('correctness-council', 'council', { councilId: 'example-council' }),
   gate('terminal-debate', 'terminal_debate'),
   gate('done-council', 'done_council'),
+  { id: 'outcome', kind: 'outcome_contract', required: true, status: 'pass',
+    artifact: 'OUTCOME-CONTRACT.json',
+    sha256: createHash('sha256').update(finalOutcomeBytes).digest('hex'), reviewedCommit },
 ];
 writeFileSync(join(dir, 'manifest.json'), JSON.stringify({
   runId: 'example-run', reviewedCommit, mergeBase: reviewedCommit,
@@ -148,6 +171,23 @@ if (linked.status === 0 || !linked.stderr.includes('artifact symlink forbidden')
 }
 unlinkSync(linkedArtifact);
 unlinkSync(outsideArtifact);
+writeFileSync(join(dir, 'manifest.json'), originalManifest);
+
+const changedOutcome = structuredClone(finalOutcome);
+changedOutcome.originalOutcome = 'A narrower substitute outcome';
+changedOutcome.lockHash = outcomeLock(changedOutcome);
+const changedOutcomeBytes = Buffer.from(`${JSON.stringify(changedOutcome, null, 2)}\n`);
+const changedOutcomeManifest = JSON.parse(originalManifest);
+const changedOutcomeGate = changedOutcomeManifest.gates.find((item) => item.kind === 'outcome_contract');
+changedOutcomeGate.sha256 = createHash('sha256').update(changedOutcomeBytes).digest('hex');
+writeFileSync(join(dir, 'OUTCOME-CONTRACT.json'), changedOutcomeBytes);
+writeFileSync(join(dir, 'manifest.json'), JSON.stringify(changedOutcomeManifest));
+const changedOutcomeResult = spawnSync('node', [validator, dir], { cwd: root, encoding: 'utf8' });
+if (changedOutcomeResult.status === 0
+    || !changedOutcomeResult.stderr.includes('changed the frozen outcome or criteria')) {
+  throw new Error('validator accepted a restamped substitute outcome');
+}
+writeFileSync(join(dir, 'OUTCOME-CONTRACT.json'), finalOutcomeBytes);
 writeFileSync(join(dir, 'manifest.json'), originalManifest);
 run('git', ['add', '.lenny/evidence']);
 run('git', ['commit', '-qm', 'attest evidence']);
@@ -343,7 +383,18 @@ riskRun('git', ['commit', '-qm', 'base']);
 const riskMergeBase = riskRun('git', ['rev-parse', 'HEAD']);
 mkdirSync(join(riskRoot, 'scripts'));
 writeFileSync(join(riskRoot, 'scripts/install.sh'), '#!/bin/sh\n');
-riskRun('git', ['add', 'scripts/install.sh']);
+const frozenRiskOutcome = {
+  version: 1, originalOutcome: 'The installer change is safely merge-ready',
+  status: 'in_progress',
+  criteria: [{ id: 'C1', text: 'Installer risk is classified honestly', required: true,
+    status: 'pending', evidence: [] }],
+  blockers: [], scopeChanges: [],
+};
+frozenRiskOutcome.lockHash = outcomeLock(frozenRiskOutcome);
+mkdirSync(join(riskRoot, '.lenny/runs/risk-downgrade'), { recursive: true });
+writeFileSync(join(riskRoot, '.lenny/runs/risk-downgrade/OUTCOME-CONTRACT.json'),
+  `${JSON.stringify(frozenRiskOutcome, null, 2)}\n`);
+riskRun('git', ['add', 'scripts/install.sh', '.lenny/runs']);
 riskRun('git', ['commit', '-qm', 'installer change']);
 const riskReviewedCommit = riskRun('git', ['rev-parse', 'HEAD']);
 const riskDiff = spawnSync('git', ['diff', '--binary', `${riskMergeBase}..${riskReviewedCommit}`], { cwd: riskRoot });
@@ -393,13 +444,25 @@ const downgradedRiskBytes = Buffer.from(`${JSON.stringify({
   mergeBase: riskMergeBase,
   description: '',
   forceHigh: false,
-  files: ['scripts/install.sh'],
+  files: ['.lenny/runs/risk-downgrade/OUTCOME-CONTRACT.json', 'scripts/install.sh'],
   triggers: [],
 }, null, 2)}\n`);
 writeFileSync(join(riskDir, 'risk.json'), downgradedRiskBytes);
 riskGates.push({
   id: 'risk', kind: 'risk_classification', required: true, status: 'pass',
   artifact: 'risk.json', sha256: createHash('sha256').update(downgradedRiskBytes).digest('hex'),
+  reviewedCommit: riskReviewedCommit,
+});
+const finalRiskOutcome = structuredClone(frozenRiskOutcome);
+finalRiskOutcome.status = 'complete';
+finalRiskOutcome.criteria[0].status = 'pass';
+finalRiskOutcome.criteria[0].evidence = ['risk.json'];
+const finalRiskOutcomeBytes = Buffer.from(`${JSON.stringify(finalRiskOutcome, null, 2)}\n`);
+writeFileSync(join(riskDir, 'OUTCOME-CONTRACT.json'), finalRiskOutcomeBytes);
+riskGates.push({
+  id: 'outcome', kind: 'outcome_contract', required: true, status: 'pass',
+  artifact: 'OUTCOME-CONTRACT.json',
+  sha256: createHash('sha256').update(finalRiskOutcomeBytes).digest('hex'),
   reviewedCommit: riskReviewedCommit,
 });
 writeFileSync(join(riskDir, 'manifest.json'), JSON.stringify({

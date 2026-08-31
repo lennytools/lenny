@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { resolve, relative, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { evaluateRisk } from './risk-policy.mjs';
+
+const outcomeValidator = fileURLToPath(new URL('../../outcome-lock/scripts/validate-outcome.mjs', import.meta.url));
 
 const dir = resolve(process.argv[2] || '');
 if (!process.argv[2]) throw new Error('usage: validate-evidence.mjs <evidence-dir>');
@@ -39,6 +42,7 @@ for (const gate of manifest.gates) {
   if (digest !== gate.sha256) throw new Error(`hash mismatch: ${gate.id}`);
   validateGateReceipt(gate, artifactBytes, manifest.reviewedCommit);
 }
+if (claimScope === 'ship') validateOutcomeGate();
 for (const finding of manifest.findings || []) {
   if (['P0', 'P1'].includes(finding.severity) && finding.validation === 'validated' && finding.status !== 'closed') {
     throw new Error(`open validated ${finding.severity}: ${finding.id}`);
@@ -218,7 +222,7 @@ function artifact(name, id) {
 }
 
 function validateGateReceipt(gate, bytes, reviewedCommit) {
-  if (['child_receipt', 'lane_receipt', 'risk_classification'].includes(gate.kind)) return;
+  if (['child_receipt', 'lane_receipt', 'risk_classification', 'outcome_contract'].includes(gate.kind)) return;
   let receipt;
   try {
     receipt = JSON.parse(bytes.toString('utf8'));
@@ -258,5 +262,36 @@ function validateGateReceipt(gate, bytes, reviewedCommit) {
   }
   if (gate.kind === 'cross_vendor_unavailable' && receipt.attempts !== gate.attempts) {
     throw new Error(`cross-vendor receipt mismatch: ${gate.id}`);
+  }
+}
+
+function immutableOutcome(contract) {
+  return JSON.stringify({
+    version: contract.version,
+    originalOutcome: contract.originalOutcome,
+    lockHash: contract.lockHash,
+    criteria: (contract.criteria || []).map(({ id, text, required = true }) => ({ id, text, required })),
+  });
+}
+
+function validateOutcomeGate() {
+  const outcomes = manifest.gates.filter((gate) => gate.required !== false
+    && gate.status === 'pass' && gate.kind === 'outcome_contract');
+  if (outcomes.length !== 1) throw new Error('exactly one passing final outcome contract required');
+  const finalOutcomePath = resolve(dir, outcomes[0].artifact);
+  const outcomeCheck = spawnSync(process.execPath,
+    [outcomeValidator, finalOutcomePath, '--claim-complete'], { encoding: 'utf8' });
+  if (outcomeCheck.status !== 0) throw new Error(`final outcome contract invalid: ${outcomeCheck.stderr.trim()}`);
+  const finalOutcome = JSON.parse(readFileSync(finalOutcomePath, 'utf8'));
+  const frozenPath = `.lenny/runs/${manifest.runId}/OUTCOME-CONTRACT.json`;
+  let frozenOutcome;
+  try {
+    frozenOutcome = JSON.parse(gitBytes(
+      ['-C', repoRoot, 'show', `${manifest.reviewedCommit}:${frozenPath}`]).toString('utf8'));
+  } catch {
+    throw new Error(`frozen outcome contract missing from reviewedCommit: ${frozenPath}`);
+  }
+  if (immutableOutcome(finalOutcome) !== immutableOutcome(frozenOutcome)) {
+    throw new Error('final outcome contract changed the frozen outcome or criteria');
   }
 }
