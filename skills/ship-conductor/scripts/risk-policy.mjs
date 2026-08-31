@@ -1,5 +1,5 @@
 export const RISK_TRIGGER_PATTERNS = [
-  ['authentication or authorization', /(^|[\/_.-])(auth|oauth|session|permission|rbac|acl)([\/_.-]|$)/],
+  ['authentication or authorization', /(^|[\/_.-])(auth|oauth|login|password|jwt|session|permission|rbac|acl|api[-_ ]?key|access[-_ ]?control)([\/_.-]|$)/],
   ['secrets or credentials', /(secret|credential|private[-_ ]?key|token[-_ ]?store|vault)/],
   ['money, orders or custody', /(payment|billing|wallet|custody|broker|trading|trade|order|position|withdraw|deposit)/],
   ['data migration or destructive persistence', /(migration|schema|database|delete|truncate|drop[-_ ]table|backfill)/],

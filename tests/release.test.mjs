@@ -56,6 +56,12 @@ test('public release scanner detects private paths and representative secrets', 
   assert(findings.includes('GitHub classic token'));
   const unquoted = ['api_', 'key=', 'unquoted-secret-value'].join('');
   assert(secretFindings(`+++ b/x\n+${unquoted}\n`).includes('assigned credential'));
+  const jsonApiKey = ['{"api', 'Key":"sk-', 'proj-', 'A'.repeat(16), '"}'].join('');
+  const bearer = ['Authorization: Bearer ', 'sk-', 'ant-', 'B'.repeat(16)].join('');
+  const stripe = ['{"STRIPE_LIVE_', 'KEY":"sk_', 'live_', 'C'.repeat(16), '"}'].join('');
+  assert(secretFindings(`+++ b/x\n+${jsonApiKey}\n`).includes('model API key'));
+  assert(secretFindings(`+++ b/x\n+${bearer}\n`).includes('authorization bearer token'));
+  assert(secretFindings(`+++ b/x\n+${stripe}\n`).includes('Stripe secret key'));
   const terminalHome = ['/Users', '/example'].join('');
   assert.deepEqual(privateReleaseFindings([['receipt.md', terminalHome]]),
     ['receipt.md: absolute home path']);

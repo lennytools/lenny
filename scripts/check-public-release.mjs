@@ -21,8 +21,12 @@ export function secretFindings(diff) {
     ['AWS secret key', /AWS_SECRET_ACCESS_KEY\s*=\s*[^\s]{8,}/i],
     ['GitHub classic token', /ghp_[A-Za-z0-9]{36}/],
     ['GitHub fine-grained token', /github_pat_[A-Za-z0-9_]{20,}/],
+    ['model API key', /\bsk-(?:proj|ant)-[A-Za-z0-9_-]{8,}\b/],
+    ['Stripe secret key', /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{8,}\b/],
+    ['authorization bearer token', /authorization\s*:\s*bearer\s+[A-Za-z0-9._-]{12,}/i],
     ['private key', /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
-    ['assigned credential', /(?:api[_-]?key|secret|token|password)\s*[:=]\s*(?:['"][^'"\r\n]{8,}['"]|[^\s#]{8,})/i],
+    ['assigned credential', /\b(?:api[_-]?key|secret|token|password)\b\s*['"]?\s*[:=]\s*(?:['"][^'"\r\n]{8,}['"]|[^\s#]{8,})/i],
+    ['assigned environment credential', /\b[A-Z][A-Z0-9_]*(?:_SECRET|_TOKEN|_PASSWORD|_KEY)\b\s*[:=]\s*(?:['"][^'"\r\n]{8,}['"]|[^\s#]{8,})/],
   ];
   return patterns.filter(([, pattern]) => pattern.test(added)).map(([name]) => name);
 }

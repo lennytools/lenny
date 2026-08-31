@@ -379,7 +379,11 @@ function sameInstall(corePath, version, expectedFiles, provenance) {
   } catch {
     return false;
   }
-  return existsSync(join(corePath, 'VERSION'))
+  return manifest.schemaVersion === 2
+    && manifest.version === version
+    && manifest.managedRoot === '.lenny/core'
+    && manifest.files && !Array.isArray(manifest.files)
+    && existsSync(join(corePath, 'VERSION'))
     && readText(join(corePath, 'VERSION')).trim() === version
     && sameHashMap(fileHashes(corePath, ['install.json']), expectedFiles)
     && manifest.sourceKind === provenance.sourceKind

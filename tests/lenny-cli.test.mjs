@@ -79,6 +79,24 @@ test('doctor detects managed-core tampering and reinstall repairs it', async () 
   assert.equal((await doctorProject({ target, deep: false })).ok, true);
 });
 
+test('reinstall repairs malformed install manifest metadata', async () => {
+  const target = fixture({ nodeProject: true });
+  await installProject({ source, target });
+  await setupProject({ target });
+  resolveLiveQa(target);
+  const manifestPath = join(target, '.lenny/core/install.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.schemaVersion = 99;
+  manifest.version = 'forged';
+  manifest.managedRoot = 'elsewhere';
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  assert.equal((await doctorProject({ target })).ok, false);
+  const repaired = await installProject({ source, target });
+  assert.equal(repaired.changed, true);
+  const healthy = await doctorProject({ target });
+  assert.equal(healthy.ok, true, JSON.stringify(healthy.checks, null, 2));
+});
+
 test('release installation records immutable source provenance', async () => {
   const target = fixture();
   const commit = 'a'.repeat(40);
@@ -320,6 +338,11 @@ test('risk selection is deterministic and fails upward', async () => {
   const installer = await classifyRisk({ target, files: ['scripts/install.sh', '.github/workflows/release.yml'] });
   assert.equal(installer.riskClass, 'high-stakes');
   assert(installer.triggers.includes('installer or package supply chain'));
+  for (const path of ['src/password-reset.js', 'src/jwt.js', 'src/api-key-store.js', 'src/access-control.js']) {
+    const auth = await classifyRisk({ target, files: [path] });
+    assert.equal(auth.riskClass, 'high-stakes', path);
+    assert(auth.triggers.includes('authentication or authorization'), path);
+  }
   const override = await classifyRisk({ target, files: ['README.md'], forceHigh: true });
   assert.equal(override.riskClass, 'high-stakes');
 });
