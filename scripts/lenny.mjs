@@ -118,8 +118,8 @@ function verifyReleaseSource(source, options) {
   };
   const commit = String(options.commit || '');
   if (git('rev-parse', 'HEAD') !== commit) throw new Error('release source HEAD does not match --commit');
-  if (git('status', '--porcelain', '--untracked-files=no')) {
-    throw new Error('release source contains modified tracked files');
+  if (git('status', '--porcelain=v1', '--untracked-files=all', '--ignored')) {
+    throw new Error('release source contains modified, untracked, or ignored files');
   }
   const expected = normalizeRepository(options.repository || '');
   const actual = normalizeRepository(git('remote', 'get-url', 'origin'));

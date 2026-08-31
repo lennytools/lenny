@@ -5,8 +5,6 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = process.cwd();
-const mergeBase = process.argv[2] || 'origin/main';
-
 function git(args, encoding = 'utf8') {
   const result = spawnSync('git', args, { cwd: root, encoding });
   if (result.status !== 0) throw new Error(result.stderr || `git ${args.join(' ')} failed`);
@@ -53,16 +51,14 @@ function main() {
   }
   const boundaryFindings = privateReleaseFindings(textFiles);
   const trackedText = textFiles.flatMap(([, contents]) => contents.split('\n').map((line) => `+${line}`)).join('\n');
-  const trackedSecrets = secretFindings(trackedText);
-  const diff = git(['diff', '--unified=0', '--no-ext-diff', `${mergeBase}..HEAD`]);
-  const secrets = [...new Set([...trackedSecrets, ...secretFindings(diff)])];
+  const secrets = secretFindings(trackedText);
   if (boundaryFindings.length || secrets.length) {
     for (const finding of [...boundaryFindings, ...secrets.map((name) => `reviewed diff: ${name}`)]) {
       console.error(finding);
     }
     process.exit(1);
   }
-  console.log(`public release scan passed: ${tracked.length} tracked files; diff ${mergeBase}..HEAD`);
+  console.log(`public release scan passed: ${tracked.length} tracked files`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

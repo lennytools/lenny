@@ -105,6 +105,7 @@ test('public CLI verifies release provenance against the source checkout', () =>
   for (const name of ['VERSION', 'LICENSE', 'skills', 'scripts']) {
     cpSync(join(source, name), join(releaseSource, name), { recursive: true });
   }
+  writeFileSync(join(releaseSource, '.gitignore'), 'skills/ignored-release-payload/\n');
   run('git', ['init', '-q'], {}, releaseSource, true);
   run('git', ['config', 'user.email', 'lenny@test.local'], {}, releaseSource, true);
   run('git', ['config', 'user.name', 'Lenny Test'], {}, releaseSource, true);
@@ -124,10 +125,22 @@ test('public CLI verifies release provenance against the source checkout', () =>
   const wrongRepository = [...args];
   wrongRepository[wrongRepository.indexOf('--repository') + 1] = 'https://example.com/not-lenny.git';
   assert.notEqual(run(process.execPath, [cli, ...wrongRepository]).status, 0);
+  mkdirSync(join(releaseSource, 'skills/untracked-release-payload'), { recursive: true });
+  writeFileSync(join(releaseSource, 'skills/untracked-release-payload/SKILL.md'), 'payload\n');
+  const untracked = run(process.execPath, [cli, ...args]);
+  assert.notEqual(untracked.status, 0);
+  assert.match(untracked.stderr, /untracked, or ignored/);
+  rmSync(join(releaseSource, 'skills/untracked-release-payload'), { recursive: true });
+  mkdirSync(join(releaseSource, 'skills/ignored-release-payload'), { recursive: true });
+  writeFileSync(join(releaseSource, 'skills/ignored-release-payload/SKILL.md'), 'payload\n');
+  const ignored = run(process.execPath, [cli, ...args]);
+  assert.notEqual(ignored.status, 0);
+  assert.match(ignored.stderr, /untracked, or ignored/);
+  rmSync(join(releaseSource, 'skills/ignored-release-payload'), { recursive: true });
   writeFileSync(join(releaseSource, 'VERSION'), '9.9.9\n');
   const modified = run(process.execPath, [cli, ...args]);
   assert.notEqual(modified.status, 0);
-  assert.match(modified.stderr, /modified tracked files/);
+  assert.match(modified.stderr, /modified, untracked, or ignored/);
 });
 
 test('reinstall compares managed bytes with the trusted source, not a forged local manifest', async () => {

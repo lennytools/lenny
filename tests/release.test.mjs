@@ -68,6 +68,8 @@ test('public release scanner detects private paths and representative secrets', 
 test('the standing check executes the public release scanner', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   assert(pkg.scripts.check.includes('node scripts/check-public-release.mjs'));
+  const scanner = readFileSync(join(root, 'scripts/check-public-release.mjs'), 'utf8');
+  assert(!scanner.includes('origin/main'));
 });
 
 test('public release excludes Bradley-specific council packs and company doctrine', () => {
