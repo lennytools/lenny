@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "recorder": "lenny-gate-runner@0.1.0",
+  "gateId": "leak-scan",
+  "kind": "leak_scan",
+  "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f",
+  "verdict": "PASS",
+  "exitCode": 0,
+  "command": [
+    "node",
+    "scripts/check-public-release.mjs",
+    "1844caebb3b2a8ccde067820a43f4b951e245047"
+  ],
+  "cwd": ".",
+  "startedAt": "2026-08-31T16:28:22.103Z",
+  "finishedAt": "2026-08-31T16:28:22.169Z",
+  "durationMs": 66,
+  "outputSha256": "650fb789e6d96a1aaa33ac66fb397b26b50aba6a860baed90ae87a74c0860334",
+  "stdoutBytes": 45,
+  "stderrBytes": 0
+}

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "recorder": "lenny-gate-runner@0.1.0",
+  "gateId": "build",
+  "kind": "build",
+  "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f",
+  "verdict": "PASS",
+  "exitCode": 0,
+  "command": [
+    "npm",
+    "run",
+    "check:syntax"
+  ],
+  "cwd": ".",
+  "startedAt": "2026-08-31T16:28:21.675Z",
+  "finishedAt": "2026-08-31T16:28:22.035Z",
+  "durationMs": 360,
+  "outputSha256": "9268c94d9efc917a919c6904d39dfb6aa02b72849602eb1071dd566a0fc0bdbf",
+  "stdoutBytes": 399,
+  "stderrBytes": 0
+}

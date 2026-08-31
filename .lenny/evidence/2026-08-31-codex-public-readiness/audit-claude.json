@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "gateId": "audit-claude",
+  "kind": "p0_p1_audit",
+  "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f",
+  "verdict": "PASS",
+  "exitCode": 0,
+  "openP0": 0,
+  "openP1": 0,
+  "reviewerId": "claude-sonnet-01afaa3",
+  "vendor": "anthropic",
+  "summary": "Claude independently returned GO with zero P0/P1 after verifying shallow-checkout scanning, clean immutable release provenance, dirty-source rejection, risk-derived councils, malformed-manifest repair, camelCase authentication paths, credential scanning and advertised-remote enforcement.",
+  "limitations": [
+    "The independent pass was bounded to P0/P1 and the named repaired boundaries.",
+    "It relied on local-fixture network equivalents rather than publishing a live release."
+  ]
+}

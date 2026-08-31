@@ -1,0 +1,122 @@
+{
+  "runId": "2026-08-31-codex-public-readiness",
+  "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f",
+  "mergeBase": "1844caebb3b2a8ccde067820a43f4b951e245047",
+  "diffSha256": "44a1b1c8d8e92eff11157d352d6aa69e6be33d4e1a4463a7d931d2ef63f3dd1e",
+  "claim": {
+    "status": "merge-ready",
+    "scope": "ship",
+    "riskClass": "high-stakes",
+    "drivingVendor": "openai",
+    "requiredCouncils": [
+      "software-implementation"
+    ]
+  },
+  "gates": [
+    {
+      "id": "tests",
+      "kind": "test",
+      "required": true,
+      "status": "pass",
+      "artifact": "tests.json",
+      "sha256": "46ef222173158e3c588d2f7741685de1b495488300eb5a0804309d24d33179c6",
+      "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f"
+    },
+    {
+      "id": "build",
+      "kind": "build",
+      "required": true,
+      "status": "pass",
+      "artifact": "build.json",
+      "sha256": "8f19090b2ade5a4a499b39302b060007568987af661d0662b1af00abe0144184",
+      "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f"
+    },
+    {
+      "id": "leak-scan",
+      "kind": "leak_scan",
+      "required": true,
+      "status": "pass",
+      "artifact": "leak-scan.json",
+      "sha256": "3ff65361c8771d4909fbbdfc74e67022a94c1ca1ae099e12206ea79e4749e1f5",
+      "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f"
+    },
+    {
+      "id": "live-qa",
+      "kind": "live_qa",
+      "required": true,
+      "status": "pass",
+      "artifact": "live-qa.json",
+      "sha256": "7822774af4616ad3a4648e2fbe2b1586e475d0bfecae8d43024eaac8e0e860b2",
+      "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f"
+    },
+    {
+      "id": "risk-classification",
+      "kind": "risk_classification",
+      "required": true,
+      "status": "pass",
+      "artifact": "risk-classification.json",
+      "sha256": "be1db9bb785b3117c2db296668697a0b045e058430b06b8c1d26271236e34eb2",
+      "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f"
+    },
+    {
+      "id": "audit-codex",
+      "kind": "p0_p1_audit",
+      "required": true,
+      "status": "pass",
+      "artifact": "audit-codex.json",
+      "sha256": "2fd11a6e2afec51f74fa70e1f7bc0099cd0df8c040d5e4f105bce7b041279d05",
+      "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f",
+      "reviewerId": "codex-contract-correctness-01afaa3",
+      "vendor": "openai"
+    },
+    {
+      "id": "audit-claude",
+      "kind": "p0_p1_audit",
+      "required": true,
+      "status": "pass",
+      "artifact": "audit-claude.json",
+      "sha256": "942af06bc25c75c54dfdf17ffcff3f6c4b9448ef307f08c0e0a77baba5f3b4e9",
+      "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f",
+      "reviewerId": "claude-sonnet-01afaa3",
+      "vendor": "anthropic"
+    },
+    {
+      "id": "software-implementation-council",
+      "kind": "council",
+      "required": true,
+      "status": "pass",
+      "artifact": "software-implementation-council.json",
+      "sha256": "b31f1fc8ca3d927ece54a1d73203433272c07f7464204ace5a2beb3deaa7fd55",
+      "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f",
+      "councilId": "software-implementation"
+    },
+    {
+      "id": "terminal-debate",
+      "kind": "terminal_debate",
+      "required": true,
+      "status": "pass",
+      "artifact": "terminal-debate.json",
+      "sha256": "6750b379cf88f0f6668770b436bead0e3550d01e6a5bac2dae32a2e5092d10ad",
+      "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f"
+    },
+    {
+      "id": "done-council",
+      "kind": "done_council",
+      "required": true,
+      "status": "pass",
+      "artifact": "done-council.json",
+      "sha256": "3146044c8ebf24a85b09482d2e37be7bee3221d02bfa2d8b731e98a2597a0041",
+      "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f"
+    },
+    {
+      "id": "outcome",
+      "kind": "outcome_contract",
+      "required": true,
+      "status": "pass",
+      "artifact": "OUTCOME-CONTRACT.json",
+      "sha256": "112414607f26074a41d42e086f97ecb790ad3e09d42f9bd0e3e70114298176c2",
+      "reviewedCommit": "01afaa3aa195805b947ba4ef71e1e3f89e8df77f"
+    }
+  ],
+  "findings": []
+}
