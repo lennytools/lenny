@@ -137,6 +137,9 @@ test('risk selection is deterministic and fails upward', async () => {
   const migration = await classifyRisk({ target, files: ['db/migrations/002-drop-table.sql'] });
   assert.equal(migration.riskClass, 'high-stakes');
   assert(migration.triggers.includes('data migration or destructive persistence'));
+  const installer = await classifyRisk({ target, files: ['scripts/install.sh', '.github/workflows/release.yml'] });
+  assert.equal(installer.riskClass, 'high-stakes');
+  assert(installer.triggers.includes('installer or package supply chain'));
   const override = await classifyRisk({ target, files: ['README.md'], forceHigh: true });
   assert.equal(override.riskClass, 'high-stakes');
 });

@@ -244,6 +244,7 @@ export async function classifyRisk({ target, files = [], description = '', force
     ['money, orders or custody', /(payment|billing|wallet|custody|broker|trading|trade|order|position|withdraw|deposit)/],
     ['data migration or destructive persistence', /(migration|schema|database|delete|truncate|drop[-_ ]table|backfill)/],
     ['production infrastructure or deployment', /(deploy|production|terraform|kubernetes|k8s|helm|cloudformation|infra)/],
+    ['installer or package supply chain', /(^|[\/_.-])(install|installer|uninstall|update|upgrade|release|publish|package)([\/_.-]|$)/],
     ['security-sensitive behavior', /(security|crypto|encrypt|decrypt|signature|sandbox|injection)/],
   ];
   const triggers = triggerPatterns.filter(([, pattern]) => pattern.test(haystack)).map(([label]) => label);
