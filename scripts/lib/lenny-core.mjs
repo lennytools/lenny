@@ -422,9 +422,22 @@ function normalizeProvenance(provenance, version) {
   }
   return {
     sourceKind,
-    repository: sourceKind === 'release' ? provenance.repository : '',
+    repository: sourceKind === 'release' ? sanitizeRepositoryIdentity(provenance.repository) : '',
     commit: sourceKind === 'release' ? commit : '',
   };
+}
+
+function sanitizeRepositoryIdentity(value) {
+  try {
+    const repository = new URL(value);
+    repository.username = '';
+    repository.password = '';
+    repository.search = '';
+    repository.hash = '';
+    return repository.toString();
+  } catch {
+    return value;
+  }
 }
 
 function sameHashMap(left, right) {

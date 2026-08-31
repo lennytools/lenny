@@ -1,7 +1,7 @@
 {
   "version": 1,
   "originalOutcome": "A stranger can install Lenny into a non-empty repository, say “set up Lenny,” receive a sensible three-seat implementation council and successfully conduct one small plan to a verified merge-ready branch.",
-  "lockHash": "sha256:4a5c2a4b7731cfbf83c8d17401b5fdaef63df6742d729a969117c549b5a73864",
+  "lockHash": "sha256:347494505f3e80e6e249aa22bb2c794b9395bbf86088b8f7c2b10d53572c5946",
   "status": "in_progress",
   "criteria": [
     {
@@ -48,7 +48,7 @@
     },
     {
       "id": "C7",
-      "text": "One temporary Codex-style repository completes the installed setup workflow end to end and is ready to conduct a plan to merge-ready.",
+      "text": "One temporary non-empty Codex repository installs Lenny, completes setup and Doctor, conducts one small plan through the default council and frozen gates, pushes its feature branch to a distinct remote and passes the strict merge-ready interlock against the remote-advertised tip.",
       "required": true,
       "status": "pending",
       "evidence": []

@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { privateReleaseFindings, secretFindings } from '../scripts/check-public-release.mjs';
 import test from 'node:test';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -28,17 +29,32 @@ test('release automation pins actions and gates publication on the full compatib
     assert.match(workflow, /actions\/setup-node@[0-9a-f]{40}/);
   }
   const release = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
-  assert(release.includes('git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main'));
+  assert(release.includes('git merge-base --is-ancestor "$EVENT_COMMIT" origin/main'));
   assert.match(release, /os:\s*\[ubuntu-latest, macos-latest\]/);
   assert.match(release, /node:\s*\[20, 22, 24\]/);
   assert.match(release, /publish:\n\s+needs: verify/);
   assert.equal((release.match(/gh release create/g) || []).length, 1);
-  assert(release.includes('raw.githubusercontent.com/lennytools/lenny/$RELEASE_COMMIT/scripts/install.sh'));
-  assert(release.includes('--commit $RELEASE_COMMIT'));
+  assert(release.includes('raw.githubusercontent.com/lennytools/lenny/$EVENT_COMMIT/scripts/install.sh'));
+  assert(release.includes('--commit $EVENT_COMMIT'));
   assert(release.includes('shasum -a 256 scripts/install.sh'));
+  assert(release.includes('EVENT_COMMIT=$(git rev-parse "$GITHUB_SHA^{commit}")'));
+  assert(release.includes('REMOTE_TAG_COMMIT'));
+  assert(release.includes('--target "$EVENT_COMMIT"'));
   const readme = readFileSync(join(root, 'README.md'), 'utf8');
   assert(!readme.includes('raw.githubusercontent.com/lennytools/lenny/v0.1.0/scripts/install.sh'));
   assert(readme.includes('--commit <SAME-40-CHARACTER-RELEASE-COMMIT>'));
+});
+
+test('public release scanner detects private paths and representative secrets', () => {
+  const homePath = ['/Users', '/example', '/project'].join('');
+  assert.deepEqual(privateReleaseFindings([['receipt.md', homePath]]),
+    ['receipt.md: absolute home path']);
+  const fakeAws = ['AWS_SECRET_ACCESS', '_KEY=', 'not-a-real-secret'].join('');
+  const fakeGitHub = ['ghp_', 'A'.repeat(36)].join('');
+  const findings = secretFindings(`diff --git a/x b/x\n+++ b/x\n+${fakeAws}\n+${fakeGitHub}\n`);
+  assert(findings.includes('AWS secret key'));
+  assert(findings.includes('GitHub classic token'));
+  assert.deepEqual(secretFindings(`diff --git a/x b/x\n--- a/x\n-${fakeAws}\n+safe=true\n`), []);
 });
 
 test('public release excludes Bradley-specific council packs and company doctrine', () => {

@@ -23,7 +23,7 @@ conduct work under a risk-adaptive, evidence-bound process.
 |---|---|
 | Public source repository is `lennytools/lenny` | `git remote -v` and authenticated `gh repo view` on 2026-08-31 |
 | Isolated branch starts from current `origin/main` | branch `codex/public-install-v1`, base `1844cae` |
-| Personal Lenny worktree has unrelated modified and untracked files | `/Users/bradleymiles/Documents/lenny` status inspected before worktree creation |
+| Personal Lenny worktree has unrelated modified and untracked files | The private canonical worktree status was inspected before worktree creation; its local path is intentionally omitted from public artifacts. |
 | Public main has 18 skills and no release tags, releases or CI | repository and GitHub state inspected on 2026-08-31 |
 | Current installer stops when `skills` or `AGENTS.md` exists | `README.md` install block |
 | Evidence validator has a passing self-test | `node skills/ship-conductor/scripts/validate-evidence.test.mjs` |

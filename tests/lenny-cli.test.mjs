@@ -81,12 +81,13 @@ test('doctor detects managed-core tampering and reinstall repairs it', async () 
 test('release installation records immutable source provenance', async () => {
   const target = fixture();
   const commit = 'a'.repeat(40);
+  const repository = ['https://user:', 'pass@github.com/lennytools/lenny.git?', 'to', 'ken=value#fragment'].join('');
   await installProject({
     source,
     target,
     provenance: {
       sourceKind: 'release',
-      repository: 'https://github.com/lennytools/lenny.git',
+      repository,
       version: 'v0.1.0',
       commit,
     },
@@ -406,6 +407,28 @@ test('every public command has non-destructive help', () => {
     assert(result.stdout.includes(`Lenny ${command}`));
     assert(result.stdout.includes('Usage:'));
   }
+});
+
+test('installed core cannot silently replace release provenance with a local reinstall', async () => {
+  const target = fixture();
+  const commit = 'a'.repeat(40);
+  await installProject({
+    source,
+    target,
+    provenance: {
+      sourceKind: 'release',
+      repository: 'https://github.com/lennytools/lenny.git',
+      version: 'v0.1.0',
+      commit,
+    },
+  });
+  const cli = join(target, '.lenny/core/bin/lenny.mjs');
+  const result = run(process.execPath, [cli, 'install', '--target', target], {}, target);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /cannot reinstall itself without trusted release provenance/);
+  const manifest = JSON.parse(text(target, '.lenny/core/install.json'));
+  assert.equal(manifest.sourceKind, 'release');
+  assert.equal(manifest.commit, commit);
 });
 
 test('the public conductor stays compact and installs phase-specific references', async () => {

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import {
   classifyRisk,
   doctorProject,
@@ -24,6 +25,9 @@ try {
   }
   switch (command) {
     case 'install':
+      if (existsSync(resolve(scriptRoot, 'install.json'))) {
+        throw new Error('installed Lenny cannot reinstall itself without trusted release provenance; rerun the pinned bootstrap install command from the release notes');
+      }
       print(await installProject({
         source: resolve(options.source || scriptRoot),
         target,

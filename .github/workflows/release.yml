@@ -28,9 +28,15 @@ jobs:
       - name: Require release tag to come from canonical main
         run: |
           git fetch --no-tags origin main
-          RELEASE_COMMIT=$(git rev-list -n 1 "$GITHUB_REF_NAME")
-          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
-          git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
+          EVENT_COMMIT=$(git rev-parse "$GITHUB_SHA^{commit}")
+          test "$(git rev-parse HEAD)" = "$EVENT_COMMIT"
+          git merge-base --is-ancestor "$EVENT_COMMIT" origin/main
+          REMOTE_TAGS=$(git ls-remote --tags origin "refs/tags/$GITHUB_REF_NAME" "refs/tags/$GITHUB_REF_NAME^{}")
+          REMOTE_TAG_COMMIT=$(printf '%s\n' "$REMOTE_TAGS" | awk '$2 ~ /\^\{\}$/ {print $1; found=1} END {if (!found) {}}')
+          if [ -z "$REMOTE_TAG_COMMIT" ]; then
+            REMOTE_TAG_COMMIT=$(printf '%s\n' "$REMOTE_TAGS" | awk '$2 !~ /\^\{\}$/ {print $1}')
+          fi
+          test "$REMOTE_TAG_COMMIT" = "$EVENT_COMMIT"
       - run: npm run check
       - run: node scripts/check-release.mjs "$GITHUB_REF_NAME"
 
@@ -47,7 +53,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RELEASE_COMMIT=$(git rev-list -n 1 "$GITHUB_REF_NAME")
+          EVENT_COMMIT=$(git rev-parse "$GITHUB_SHA^{commit}")
+          test "$(git rev-parse HEAD)" = "$EVENT_COMMIT"
+          REMOTE_TAGS=$(git ls-remote --tags origin "refs/tags/$GITHUB_REF_NAME" "refs/tags/$GITHUB_REF_NAME^{}")
+          REMOTE_TAG_COMMIT=$(printf '%s\n' "$REMOTE_TAGS" | awk '$2 ~ /\^\{\}$/ {print $1; found=1} END {if (!found) {}}')
+          if [ -z "$REMOTE_TAG_COMMIT" ]; then
+            REMOTE_TAG_COMMIT=$(printf '%s\n' "$REMOTE_TAGS" | awk '$2 !~ /\^\{\}$/ {print $1}')
+          fi
+          test "$REMOTE_TAG_COMMIT" = "$EVENT_COMMIT"
           mkdir -p dist
           {
             echo '## Install'
@@ -55,12 +68,12 @@ jobs:
             echo 'Run from the root of your Git repository:'
             echo
             echo '```bash'
-            echo "curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/$RELEASE_COMMIT/scripts/install.sh \\"
-            echo "  | sh -s -- --version $GITHUB_REF_NAME --commit $RELEASE_COMMIT"
+            echo "curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/$EVENT_COMMIT/scripts/install.sh \\"
+            echo "  | sh -s -- --version $GITHUB_REF_NAME --commit $EVENT_COMMIT"
             echo '```'
             echo
-            echo "Immutable release commit: \`$RELEASE_COMMIT\`"
+            echo "Immutable release commit: \`$EVENT_COMMIT\`"
           } > dist/INSTALL.md
           shasum -a 256 scripts/install.sh > dist/SHA256SUMS
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Lenny $GITHUB_REF_NAME" \
+          gh release create "$GITHUB_REF_NAME" --verify-tag --target "$EVENT_COMMIT" --title "Lenny $GITHUB_REF_NAME" \
             --notes-file dist/INSTALL.md dist/SHA256SUMS

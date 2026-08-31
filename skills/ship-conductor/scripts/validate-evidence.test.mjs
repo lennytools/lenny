@@ -40,7 +40,7 @@ writeFileSync(join(root, '.lenny/runs/example-run/CONDUCTOR-RUN.md'),
 const gateCommands = {
   tests: [process.execPath, '-e', "if (!require('node:fs').existsSync('code.txt')) process.exit(1)"],
   build: [process.execPath, '-e', "if (require('node:fs').readFileSync('code.txt','utf8') !== 'reviewed\\n') process.exit(1)"],
-  'leak-scan': [process.execPath, '-e', "if (require('node:fs').readFileSync('code.txt','utf8').includes('SECRET=')) process.exit(1)"],
+  'leak-scan': [process.execPath, '-e', "if (require('node:fs').readFileSync('code.txt','utf8').includes('SENSITIVE=')) process.exit(1)"],
   'live-qa': [process.execPath, '-e', "if (!require('node:fs').readFileSync('code.txt','utf8').startsWith('reviewed')) process.exit(1)"],
 };
 writeFileSync(join(root, '.lenny/runs/example-run/GATE-CONTRACT.json'), `${JSON.stringify({
@@ -247,6 +247,18 @@ if (spoofedLocal.status === 0 || !spoofedLocal.stderr.includes('real configured 
 }
 run('git', ['config', '--unset-all', `branch.${branch}.remote`]);
 run('git', ['config', '--unset-all', `branch.${branch}.merge`]);
+run('git', ['remote', 'add', 'origin', '.']);
+run('git', ['config', `branch.${branch}.remote`, 'origin']);
+run('git', ['config', `branch.${branch}.merge`, `refs/heads/${branch}`]);
+for (const selfUrl of ['.', '.git', root, `file://${root}/.git`]) {
+  run('git', ['remote', 'set-url', 'origin', selfUrl]);
+  const selfRemote = spawnSync('node', [validator, dir, '--claim-merge-ready'],
+    { cwd: root, encoding: 'utf8' });
+  if (selfRemote.status === 0 || !selfRemote.stderr.includes('distinct remote repository')) {
+    throw new Error(`interlock accepted self-referential named remote: ${selfUrl}`);
+  }
+}
+run('git', ['remote', 'remove', 'origin']);
 run('git', ['remote', 'add', 'origin', remote]);
 run('git', ['update-ref', `refs/remotes/origin/${branch}`, 'HEAD']);
 run('git', ['config', `branch.${branch}.remote`, 'origin']);
@@ -258,6 +270,19 @@ if (forgedTracking.status === 0 || !forgedTracking.stderr.includes('remote branc
 run('git', ['push', '-qu', 'origin', 'HEAD']);
 const receipt = run('node', [validator, dir, '--claim-merge-ready']);
 if (!receipt.includes('MERGE-READY INTERLOCK: PASS')) throw new Error('missing interlock receipt');
+writeFileSync(join(dir, 'undeclared.txt'), 'not in manifest\n');
+run('git', ['add', '.lenny/evidence']);
+run('git', ['commit', '-qm', 'add undeclared evidence']);
+run('git', ['push', '-q']);
+const undeclared = spawnSync('node', [validator, dir, '--claim-merge-ready'],
+  { cwd: root, encoding: 'utf8' });
+if (undeclared.status === 0 || !undeclared.stderr.includes('undeclared or missing files')) {
+  throw new Error('interlock accepted undeclared evidence content');
+}
+unlinkSync(join(dir, 'undeclared.txt'));
+run('git', ['add', '-u', '.lenny/evidence']);
+run('git', ['commit', '-qm', 'remove undeclared evidence']);
+run('git', ['push', '-q']);
 const externalBundle = mkdtempSync(join(tmpdir(), 'lenny-external-evidence-'));
 cpSync(dir, externalBundle, { recursive: true });
 const external = spawnSync('node', [validator, externalBundle, '--claim-merge-ready'],
@@ -339,6 +364,10 @@ standardManifest.gates = standardManifest.gates.filter((item) =>
   && item.kind !== 'cross_vendor_unavailable'
   && item.id !== 'audit-claude'
   && item.id !== 'audit-codex-c');
+for (const artifactName of ['terminal-debate.json', 'audit-claude.json', 'audit-codex-c.json',
+  'cross-vendor-unavailable.json']) {
+  unlinkSync(join(dir, artifactName));
+}
 const riskBytes = Buffer.from(`${JSON.stringify({
   schemaVersion: 1,
   riskClass: 'standard',

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { lstatSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, relative, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -182,6 +182,12 @@ if (claimMergeReady) {
   let head;
   let upstream;
   if (claim.scope !== 'fleet') {
+    const declared = [...new Set(['manifest.json', ...manifest.gates.flatMap((gate) =>
+      [gate.artifact, gate.dependencyManifest].filter(Boolean))])].sort();
+    const present = listEvidenceFiles(realDir).sort();
+    if (JSON.stringify(present) !== JSON.stringify(declared)) {
+      throw new Error('evidence bundle contains undeclared or missing files');
+    }
     if (status.stdout.trim()) throw new Error('worktree must be clean for merge-ready claim');
     ({ head, upstream } = verifyAdvertisedRemoteTip());
   }
@@ -311,6 +317,22 @@ function verifyAdvertisedRemoteTip() {
   const remote = gitText(['-C', repoRoot, 'config', '--get', `branch.${branch}.remote`]);
   const remoteRef = gitText(['-C', repoRoot, 'config', '--get', `branch.${branch}.merge`]);
   if (!remote || remote === '.') throw new Error('merge-ready proof requires a real configured remote');
+  const remoteUrlResult = spawnSync('git', ['-C', repoRoot, 'remote', 'get-url', remote], {
+    encoding: 'utf8', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  });
+  if (remoteUrlResult.status !== 0) throw new Error('configured remote has no resolvable URL');
+  const remoteUrl = remoteUrlResult.stdout.trim();
+  const localTarget = localRemoteTarget(remoteUrl);
+  if (localTarget) {
+    const forbidden = new Set([
+      realpathSync(repoRoot),
+      realpathSync(gitText(['-C', repoRoot, 'rev-parse', '--absolute-git-dir'])),
+      realpathSync(gitText(['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'])),
+    ]);
+    if (forbidden.has(localTarget)) {
+      throw new Error('merge-ready proof requires a distinct remote repository');
+    }
+  }
   if (!remoteRef.startsWith('refs/heads/')) throw new Error('upstream is not a remote branch');
   const result = spawnSync('git', ['-C', repoRoot, 'ls-remote', '--exit-code', '--heads', remote, remoteRef], {
     encoding: 'utf8',
@@ -326,6 +348,27 @@ function verifyAdvertisedRemoteTip() {
     throw new Error('local HEAD does not equal the branch advertised by its remote');
   }
   return { head, upstream: remoteSha };
+}
+
+function localRemoteTarget(url) {
+  let path = null;
+  if (url.startsWith('file://')) {
+    try { path = fileURLToPath(url); } catch { return null; }
+  } else if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../') || url === '.' || url === '.git') {
+    path = resolve(repoRoot, url);
+  }
+  if (!path) return null;
+  try { return realpathSync(path); } catch { return null; }
+}
+
+function listEvidenceFiles(root, current = root) {
+  const files = [];
+  for (const entry of readdirSync(current, { withFileTypes: true })) {
+    const path = resolve(current, entry.name);
+    if (entry.isDirectory()) files.push(...listEvidenceFiles(root, path));
+    else files.push(relative(root, path));
+  }
+  return files;
 }
 
 function immutableOutcome(contract) {
