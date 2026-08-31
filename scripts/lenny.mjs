@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { existsSync } from 'node:fs';
 import {
   classifyRisk,
   doctorProject,
@@ -12,7 +11,9 @@ import {
 
 const argv = process.argv.slice(2);
 const command = argv.shift();
-const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const currentCli = fileURLToPath(import.meta.url);
+const scriptRoot = resolve(dirname(currentCli), '..');
+const runningFromInstalledCore = resolve(scriptRoot, 'bin/lenny.mjs') === currentCli;
 let options = {};
 
 try {
@@ -25,7 +26,7 @@ try {
   }
   switch (command) {
     case 'install':
-      if (existsSync(resolve(scriptRoot, 'install.json'))) {
+      if (runningFromInstalledCore) {
         throw new Error('installed Lenny cannot reinstall itself without trusted release provenance; rerun the pinned bootstrap install command from the release notes');
       }
       print(await installProject({

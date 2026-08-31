@@ -449,6 +449,11 @@ test('installed core cannot silently replace release provenance with a local rei
   const manifest = JSON.parse(text(target, '.lenny/core/install.json'));
   assert.equal(manifest.sourceKind, 'release');
   assert.equal(manifest.commit, commit);
+  rmSync(join(target, '.lenny/core/install.json'));
+  const withoutManifest = run(process.execPath, [cli, 'install', '--target', target], {}, target);
+  assert.notEqual(withoutManifest.status, 0);
+  assert.match(withoutManifest.stderr, /cannot reinstall itself without trusted release provenance/);
+  assert.throws(() => statSync(join(target, '.lenny/core/install.json')));
 });
 
 test('the public conductor stays compact and installs phase-specific references', async () => {
