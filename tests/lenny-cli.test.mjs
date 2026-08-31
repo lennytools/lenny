@@ -183,6 +183,17 @@ test('every public command has non-destructive help', () => {
   }
 });
 
+test('the public conductor stays compact and installs phase-specific references', async () => {
+  const conductor = readFileSync(join(source, 'skills/ship-conductor/SKILL.md'), 'utf8');
+  assert(conductor.split('\n').length <= 250, 'public conductor exceeded the 250-line startup budget');
+  const target = fixture();
+  await installProject({ source, target });
+  assert.equal(text(target, '.lenny/core/skills/ship-conductor/references/evidence-contract.md')
+    .includes('# Evidence Contract'), true);
+  assert.equal(text(target, '.lenny/core/skills/ship-conductor/references/high-stakes-audit.md')
+    .includes('# High-Stakes Audit'), true);
+});
+
 function fixture({ nodeProject = false } = {}) {
   const target = mkdtempSync(join(tmpdir(), 'lenny-project-'));
   created.push(target);
