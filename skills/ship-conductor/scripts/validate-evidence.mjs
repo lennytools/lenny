@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { resolve, relative, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { evaluateRisk } from './risk-policy.mjs';
 
 const dir = resolve(process.argv[2] || '');
 if (!process.argv[2]) throw new Error('usage: validate-evidence.mjs <evidence-dir>');
@@ -91,6 +92,15 @@ if (claimMergeReady) {
           .split('\n').filter(Boolean).sort();
       if (JSON.stringify([...(risk.files || [])].sort()) !== JSON.stringify(expectedRiskFiles)) {
         throw new Error('risk classification file inventory mismatch');
+      }
+      const expectedRisk = evaluateRisk({
+        files: expectedRiskFiles,
+        description: risk.description || '',
+        forceHigh: risk.forceHigh === true,
+      });
+      if (risk.riskClass !== expectedRisk.riskClass
+          || JSON.stringify([...(risk.triggers || [])].sort()) !== JSON.stringify(expectedRisk.triggers.sort())) {
+        throw new Error('risk classification was downgraded or its triggers do not match the reviewed diff');
       }
     }
     if (!passed('done_council').length) throw new Error('missing passing done council');
@@ -223,9 +233,19 @@ function validateGateReceipt(gate, bytes, reviewedCommit) {
   }
   const expectedVerdict = ['council', 'terminal_debate', 'done_council'].includes(gate.kind) ? 'GO' : 'PASS';
   if (receipt.verdict !== expectedVerdict) throw new Error(`gate receipt verdict is not ${expectedVerdict}: ${gate.id}`);
-  if (['test', 'build', 'leak_scan', 'live_qa'].includes(gate.kind)
-      && typeof receipt.command !== 'string' && typeof receipt.workflow !== 'string') {
-    throw new Error(`gate receipt lacks command or workflow: ${gate.id}`);
+  if (['test', 'build', 'leak_scan', 'live_qa'].includes(gate.kind)) {
+    if (receipt.recorder !== 'lenny-gate-runner@0.1.0'
+        || !Array.isArray(receipt.command) || !receipt.command.length
+        || receipt.command.some((item) => typeof item !== 'string' || !item)
+        || !/^[0-9a-f]{64}$/.test(receipt.outputSha256 || '')
+        || !Number.isInteger(receipt.durationMs) || receipt.durationMs < 0
+        || !Number.isInteger(receipt.stdoutBytes) || receipt.stdoutBytes < 0
+        || !Number.isInteger(receipt.stderrBytes) || receipt.stderrBytes < 0
+        || !Number.isFinite(Date.parse(receipt.startedAt))
+        || !Number.isFinite(Date.parse(receipt.finishedAt))
+        || Date.parse(receipt.finishedAt) < Date.parse(receipt.startedAt)) {
+      throw new Error(`deterministic gate lacks a valid runner receipt: ${gate.id}`);
+    }
   }
   if (gate.kind === 'p0_p1_audit') {
     if (receipt.openP0 !== 0 || receipt.openP1 !== 0

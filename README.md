@@ -63,7 +63,9 @@ Council and runs Doctor. Verify at any time:
 node .lenny/core/bin/lenny.mjs doctor
 ```
 
-Doctor checks managed installation state, Codex availability and the configured
+Ordinary Doctor is non-executing: it checks managed installation state, Codex
+availability and whether verification is resolved. After reviewing the profile,
+run `node .lenny/core/bin/lenny.mjs doctor --deep true` to execute the configured
 project test/build commands. Unresolved verification or live-QA fields fail
 closed until setup resolves them or records an explicit not-applicable reason.
 

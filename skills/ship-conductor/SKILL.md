@@ -198,8 +198,9 @@ and confirm that the only remaining human acts are review and merge.
 
 Read `references/evidence-contract.md`. Create the evidence bundle under
 `.lenny/evidence/<run-id>`, hash every gate artifact and bind it to the exact
-reviewed commit. Commit the evidence, push the branch when authorized and verify
-local `HEAD` equals upstream.
+reviewed commit. Record deterministic tests, builds, leak scans and live QA with
+the referenced gate runner rather than writing pass receipts by hand. Commit the
+evidence, push the branch when authorized and verify local `HEAD` equals upstream.
 
 The phrase `merge-ready` is forbidden until this exits `0`:
 

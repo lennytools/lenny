@@ -62,10 +62,11 @@ state or an explicit user answer.
 6. Run the deterministic diagnostic:
 
    ```bash
-   node .lenny/core/bin/lenny.mjs doctor
+   node .lenny/core/bin/lenny.mjs doctor --deep true
    ```
 
-   Deep Doctor runs the profile's configured test/build commands and any
+   After the profile has been reviewed, explicit deep Doctor runs its configured
+   test/build commands and any
    configured lint/typecheck command. Unresolved test, build or live-QA fields
    fail closed; use an explicit `Not applicable — <reason>` only when that gate
    truly does not exist for this repository. Fix failed checks. Warnings must be

@@ -8,15 +8,20 @@ permissions:
   contents: write
 
 jobs:
-  verify-and-release:
-    runs-on: ubuntu-latest
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22, 24]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci --ignore-scripts
       - name: Require release tag to come from canonical main
@@ -25,6 +30,14 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - run: npm run check
       - run: node scripts/check-release.mjs "$GITHUB_REF_NAME"
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
       - name: Create immutable GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -20,7 +20,7 @@ test('release metadata rejects a mismatched tag', () => {
   assert(result.stderr.includes('does not match v0.1.0'));
 });
 
-test('release automation pins actions and requires canonical-main ancestry', () => {
+test('release automation pins actions and gates publication on the full compatibility matrix', () => {
   for (const name of ['ci.yml', 'release.yml']) {
     const workflow = readFileSync(join(root, '.github/workflows', name), 'utf8');
     assert(!/uses:\s+actions\/(checkout|setup-node)@v\d/.test(workflow));
@@ -29,4 +29,8 @@ test('release automation pins actions and requires canonical-main ancestry', () 
   }
   const release = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
   assert(release.includes('git merge-base --is-ancestor "$GITHUB_SHA" origin/main'));
+  assert.match(release, /os:\s*\[ubuntu-latest, macos-latest\]/);
+  assert.match(release, /node:\s*\[20, 22, 24\]/);
+  assert.match(release, /publish:\n\s+needs: verify/);
+  assert.equal((release.match(/gh release create/g) || []).length, 1);
 });

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = mkdtempSync(join(tmpdir(), 'lenny-evidence-'));
 const validator = fileURLToPath(new URL('./validate-evidence.mjs', import.meta.url));
+const gateRunner = fileURLToPath(new URL('./run-gate.mjs', import.meta.url));
 const run = (cmd, args) => {
   const out = spawnSync(cmd, args, { cwd: root, encoding: 'utf8' });
   if (out.status !== 0) throw new Error(out.stderr || `${cmd} failed`);
@@ -27,20 +28,32 @@ const dir = join(root, '.lenny/evidence/example-run');
 mkdirSync(dir, { recursive: true });
 const gate = (id, kind, extra = {}) => {
   const verdict = ['council', 'terminal_debate', 'done_council'].includes(kind) ? 'GO' : 'PASS';
-  const receipt = {
-    schemaVersion: 1,
-    gateId: id,
-    kind,
-    reviewedCommit,
-    verdict,
-    exitCode: 0,
-    ...(['test', 'build', 'leak_scan', 'live_qa'].includes(kind) ? { command: `fixture:${id}` } : {}),
-    ...(kind === 'p0_p1_audit' ? { openP0: 0, openP1: 0 } : {}),
-    ...extra,
-  };
-  const artifact = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
   const artifactName = `${id}.json`;
-  writeFileSync(join(dir, artifactName), artifact);
+  let artifact;
+  if (['test', 'build', 'leak_scan', 'live_qa'].includes(kind)) {
+    const result = spawnSync(process.execPath, [gateRunner,
+      '--gate-id', id,
+      '--kind', kind,
+      '--reviewed-commit', reviewedCommit,
+      '--output', join(dir, artifactName),
+      '--', process.execPath, '-e', 'process.exit(0)'],
+    { cwd: root, encoding: 'utf8' });
+    if (result.status !== 0) throw new Error(result.stderr || `gate runner failed: ${id}`);
+    artifact = readFileSync(join(dir, artifactName));
+  } else {
+    const receipt = {
+      schemaVersion: 1,
+      gateId: id,
+      kind,
+      reviewedCommit,
+      verdict,
+      exitCode: 0,
+      ...(kind === 'p0_p1_audit' ? { openP0: 0, openP1: 0 } : {}),
+      ...extra,
+    };
+    artifact = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
+    writeFileSync(join(dir, artifactName), artifact);
+  }
   return { id, kind, required: true, status: 'pass', artifact: artifactName,
     sha256: createHash('sha256').update(artifact).digest('hex'), reviewedCommit, ...extra };
 };
@@ -84,6 +97,20 @@ if (unbound.status === 0 || !unbound.stderr.includes('gate receipt is not valid 
   throw new Error('validator accepted an artifact without commit binding');
 }
 writeFileSync(join(dir, unboundManifest.gates[0].artifact), originalTestArtifact);
+writeFileSync(join(dir, 'manifest.json'), originalManifest);
+
+const handWrittenReceipt = JSON.parse(originalTestArtifact.toString('utf8'));
+delete handWrittenReceipt.recorder;
+const handWrittenBytes = Buffer.from(`${JSON.stringify(handWrittenReceipt, null, 2)}\n`);
+const handWrittenManifest = JSON.parse(originalManifest);
+handWrittenManifest.gates[0].sha256 = createHash('sha256').update(handWrittenBytes).digest('hex');
+writeFileSync(join(dir, handWrittenManifest.gates[0].artifact), handWrittenBytes);
+writeFileSync(join(dir, 'manifest.json'), JSON.stringify(handWrittenManifest));
+const handWritten = spawnSync('node', [validator, dir], { cwd: root, encoding: 'utf8' });
+if (handWritten.status === 0 || !handWritten.stderr.includes('lacks a valid runner receipt')) {
+  throw new Error('validator accepted a hand-written deterministic pass receipt');
+}
+writeFileSync(join(dir, handWrittenManifest.gates[0].artifact), originalTestArtifact);
 writeFileSync(join(dir, 'manifest.json'), originalManifest);
 
 const failedReceipt = JSON.parse(originalTestArtifact.toString('utf8'));
@@ -294,5 +321,95 @@ const fleetReceipt = spawnSync('node', [validator, fleetDir, '--claim-merge-read
   { cwd: fleetRoot, encoding: 'utf8' });
 if (fleetReceipt.status !== 0 || !fleetReceipt.stdout.includes('MERGE-READY INTERLOCK: PASS')) {
   throw new Error(fleetReceipt.stderr || 'fleet interlock failed');
+}
+
+const riskRoot = mkdtempSync(join(tmpdir(), 'lenny-risk-downgrade-'));
+const riskRun = (cmd, args) => {
+  const out = spawnSync(cmd, args, { cwd: riskRoot, encoding: 'utf8' });
+  if (out.status !== 0) throw new Error(out.stderr || `${cmd} failed`);
+  return out.stdout.trim();
+};
+riskRun('git', ['init', '-q']);
+riskRun('git', ['config', 'user.email', 'lenny@test.local']);
+riskRun('git', ['config', 'user.name', 'Lenny Test']);
+writeFileSync(join(riskRoot, 'README.md'), '# Risk fixture\n');
+riskRun('git', ['add', 'README.md']);
+riskRun('git', ['commit', '-qm', 'base']);
+const riskMergeBase = riskRun('git', ['rev-parse', 'HEAD']);
+mkdirSync(join(riskRoot, 'scripts'));
+writeFileSync(join(riskRoot, 'scripts/install.sh'), '#!/bin/sh\n');
+riskRun('git', ['add', 'scripts/install.sh']);
+riskRun('git', ['commit', '-qm', 'installer change']);
+const riskReviewedCommit = riskRun('git', ['rev-parse', 'HEAD']);
+const riskDiff = spawnSync('git', ['diff', '--binary', `${riskMergeBase}..${riskReviewedCommit}`], { cwd: riskRoot });
+if (riskDiff.status !== 0) throw new Error('cannot hash risk fixture diff');
+const riskDiffSha256 = createHash('sha256').update(riskDiff.stdout).digest('hex');
+const riskDir = join(riskRoot, '.lenny/evidence/risk-downgrade');
+mkdirSync(riskDir, { recursive: true });
+const riskGates = [];
+const addRiskGate = (id, kind, extra = {}) => {
+  const artifactName = `${id}.json`;
+  let bytes;
+  if (['test', 'build', 'leak_scan', 'live_qa'].includes(kind)) {
+    const result = spawnSync(process.execPath, [gateRunner,
+      '--gate-id', id, '--kind', kind,
+      '--reviewed-commit', riskReviewedCommit,
+      '--output', join(riskDir, artifactName),
+      '--', process.execPath, '-e', 'process.exit(0)'],
+    { cwd: riskRoot, encoding: 'utf8' });
+    if (result.status !== 0) throw new Error(result.stderr || `risk gate runner failed: ${id}`);
+    bytes = readFileSync(join(riskDir, artifactName));
+  } else {
+    const verdict = ['council', 'done_council'].includes(kind) ? 'GO' : 'PASS';
+    bytes = Buffer.from(`${JSON.stringify({
+      schemaVersion: 1, gateId: id, kind, reviewedCommit: riskReviewedCommit,
+      verdict, exitCode: 0,
+      ...(kind === 'p0_p1_audit' ? { openP0: 0, openP1: 0 } : {}),
+      ...extra,
+    }, null, 2)}\n`);
+    writeFileSync(join(riskDir, artifactName), bytes);
+  }
+  riskGates.push({
+    id, kind, required: true, status: 'pass', artifact: artifactName,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    reviewedCommit: riskReviewedCommit, ...extra,
+  });
+};
+for (const [id, kind] of [['tests', 'test'], ['build', 'build'], ['leak-scan', 'leak_scan'], ['live-qa', 'live_qa']]) {
+  addRiskGate(id, kind);
+}
+addRiskGate('audit', 'p0_p1_audit', { reviewerId: 'auditor', vendor: 'openai' });
+addRiskGate('council', 'council', { councilId: 'software-implementation' });
+addRiskGate('done', 'done_council');
+const downgradedRiskBytes = Buffer.from(`${JSON.stringify({
+  schemaVersion: 1,
+  riskClass: 'standard',
+  reviewedCommit: riskReviewedCommit,
+  mergeBase: riskMergeBase,
+  description: '',
+  forceHigh: false,
+  files: ['scripts/install.sh'],
+  triggers: [],
+}, null, 2)}\n`);
+writeFileSync(join(riskDir, 'risk.json'), downgradedRiskBytes);
+riskGates.push({
+  id: 'risk', kind: 'risk_classification', required: true, status: 'pass',
+  artifact: 'risk.json', sha256: createHash('sha256').update(downgradedRiskBytes).digest('hex'),
+  reviewedCommit: riskReviewedCommit,
+});
+writeFileSync(join(riskDir, 'manifest.json'), JSON.stringify({
+  runId: 'risk-downgrade', reviewedCommit: riskReviewedCommit, mergeBase: riskMergeBase,
+  diffSha256: riskDiffSha256,
+  claim: { status: 'merge-ready', scope: 'ship', riskClass: 'standard', drivingVendor: 'openai',
+    requiredCouncils: ['software-implementation'] },
+  gates: riskGates,
+  findings: [],
+}));
+riskRun('git', ['add', '.lenny/evidence']);
+riskRun('git', ['commit', '-qm', 'forged downgraded risk evidence']);
+const downgradedRisk = spawnSync(process.execPath, [validator, riskDir, '--claim-merge-ready'],
+  { cwd: riskRoot, encoding: 'utf8' });
+if (downgradedRisk.status === 0 || !downgradedRisk.stderr.includes('risk classification was downgraded')) {
+  throw new Error('validator accepted a downgraded installer risk class');
 }
 console.log('validate-evidence self-test passed');

@@ -198,6 +198,28 @@ test('doctor fails unresolved setup and failing verification commands', async ()
   assert(failed.checks.some((item) => item.name === 'test command' && item.status === 'fail'));
 });
 
+test('ordinary doctor never executes commands preserved in a project profile', async () => {
+  const target = fixture({ nodeProject: true });
+  await installProject({ source, target });
+  await setupProject({ target });
+  resolveLiveQa(target);
+  const marker = join(target, 'doctor-must-not-run.txt');
+  const profilePath = join(target, '.lenny', 'profile.md');
+  const profile = readFileSync(profilePath, 'utf8').replace(
+    /- Test: .*/,
+    `- Test: \`node -e "require('node:fs').writeFileSync('${marker}', 'executed')"\``,
+  );
+  writeFileSync(profilePath, profile);
+
+  const result = await doctorProject({ target });
+  assert.equal(result.ok, true, JSON.stringify(result.checks, null, 2));
+  assert.equal(result.mode, 'configuration');
+  assert(result.lines[0].includes('commands were not executed'));
+  assert.throws(() => statSync(marker));
+  assert(result.checks.some((item) => item.name === 'test command configured' && item.status === 'pass'
+    && item.detail.includes('configured; not executed')));
+});
+
 test('risk selection is deterministic and fails upward', async () => {
   const target = fixture();
   const standard = await classifyRisk({ target, files: ['src/format-date.js'] });
@@ -227,6 +249,31 @@ test('reviewed risk derives the exact committed diff and rejects partial invento
   await assert.rejects(() => classifyRisk({
     target, reviewedCommit, mergeBase, files: ['README.md'],
   }), /do not match/);
+});
+
+test('deterministic gate runner records real success and failure exits', () => {
+  const target = fixture();
+  const reviewedCommit = run('git', ['rev-parse', 'HEAD'], {}, target, true).stdout.trim();
+  const runner = join(source, 'skills', 'ship-conductor', 'scripts', 'run-gate.mjs');
+  const passedPath = join(target, '.lenny', 'passed.json');
+  const passed = run(process.execPath, [runner,
+    '--gate-id', 'tests', '--kind', 'test', '--reviewed-commit', reviewedCommit,
+    '--output', passedPath, '--', process.execPath, '-e', "console.log('ok')"], {}, target);
+  assert.equal(passed.status, 0, passed.stderr);
+  const passedReceipt = JSON.parse(readFileSync(passedPath, 'utf8'));
+  assert.equal(passedReceipt.verdict, 'PASS');
+  assert.equal(passedReceipt.exitCode, 0);
+  assert.deepEqual(passedReceipt.command.slice(0, 2), [process.execPath, '-e']);
+  assert.match(passedReceipt.outputSha256, /^[0-9a-f]{64}$/);
+
+  const failedPath = join(target, '.lenny', 'failed.json');
+  const failed = run(process.execPath, [runner,
+    '--gate-id', 'build', '--kind', 'build', '--reviewed-commit', reviewedCommit,
+    '--output', failedPath, '--', process.execPath, '-e', 'process.exit(9)'], {}, target);
+  assert.equal(failed.status, 9);
+  const failedReceipt = JSON.parse(readFileSync(failedPath, 'utf8'));
+  assert.equal(failedReceipt.verdict, 'FAIL');
+  assert.equal(failedReceipt.exitCode, 9);
 });
 
 test('uninstall removes only managed core and routing', async () => {

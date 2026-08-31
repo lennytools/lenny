@@ -14,6 +14,7 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { evaluateRisk } from '../../skills/ship-conductor/scripts/risk-policy.mjs';
 
 export const MANAGED_START = '<!-- lenny:start -->';
 export const MANAGED_END = '<!-- lenny:end -->';
@@ -169,7 +170,7 @@ export async function setupProject({ target, force = false }) {
   };
 }
 
-export async function doctorProject({ target, deep = true }) {
+export async function doctorProject({ target, deep = false }) {
   const targetRoot = resolve(target);
   const checks = [];
   check(checks, Number(process.versions.node.split('.')[0]) >= 20, 'Node.js 20+', process.version);
@@ -235,13 +236,18 @@ export async function doctorProject({ target, deep = true }) {
   const warnings = checks.filter((item) => item.status === 'warn');
   return {
     ok: failures.length === 0,
+    mode: deep ? 'deep' : 'configuration',
     checks,
     failures: failures.length,
     warnings: warnings.length,
     lines: [
-      failures.length ? 'Lenny Doctor found blocking setup problems.' : 'Lenny Doctor: healthy.',
+      failures.length
+        ? 'Lenny Doctor found blocking setup problems.'
+        : deep ? 'Lenny Doctor: healthy.' : 'Lenny Doctor: configuration healthy; project commands were not executed.',
       ...checks.map((item) => `${item.status === 'pass' ? '✓' : item.status === 'warn' ? '!' : '✗'} ${item.name}${item.detail ? ` — ${item.detail}` : ''}`),
-      failures.length ? 'Fix the failed checks above, then rerun doctor.' : 'You can now say “Conduct this plan.”',
+      failures.length
+        ? 'Fix the failed checks above, then rerun doctor.'
+        : deep ? 'You can now say “Conduct this plan.”' : 'Review .lenny/profile.md, then run doctor --deep true before conducting.',
     ],
   };
 }
@@ -265,24 +271,14 @@ export async function classifyRisk({
     throw new Error('explicit risk files do not match the reviewed commit diff');
   }
   const changedFiles = reviewedCommit ? committedFiles : (files.length ? files : gitChangedFiles(targetRoot));
-  const haystack = [...changedFiles, description].join('\n').toLowerCase();
-  const triggerPatterns = [
-    ['authentication or authorization', /(^|[\/_.-])(auth|oauth|session|permission|rbac|acl)([\/_.-]|$)/],
-    ['secrets or credentials', /(secret|credential|private[-_ ]?key|token[-_ ]?store|vault)/],
-    ['money, orders or custody', /(payment|billing|wallet|custody|broker|trading|trade|order|position|withdraw|deposit)/],
-    ['data migration or destructive persistence', /(migration|schema|database|delete|truncate|drop[-_ ]table|backfill)/],
-    ['production infrastructure or deployment', /(deploy|production|terraform|kubernetes|k8s|helm|cloudformation|infra)/],
-    ['installer or package supply chain', /(^|[\/_.-])(install|installer|uninstall|update|upgrade|release|publish|package)([\/_.-]|$)/],
-    ['security-sensitive behavior', /(security|crypto|encrypt|decrypt|signature|sandbox|injection)/],
-  ];
-  const triggers = triggerPatterns.filter(([, pattern]) => pattern.test(haystack)).map(([label]) => label);
-  if (forceHigh) triggers.unshift('explicit high-stakes override');
-  const riskClass = triggers.length ? 'high-stakes' : 'standard';
+  const { riskClass, triggers } = evaluateRisk({ files: changedFiles, description, forceHigh });
   return {
     ok: true,
     schemaVersion: 1,
     reviewedCommit: reviewedCommit || gitHead(targetRoot),
     ...(mergeBase ? { mergeBase } : {}),
+    description,
+    forceHigh,
     riskClass,
     files: changedFiles,
     triggers,
@@ -489,7 +485,11 @@ function verifyProfileCommand(checks, root, profile, label, deep) {
     return;
   }
   if (!deep) {
-    check(checks, true, `${label.toLowerCase()} command configured`);
+    checks.push({
+      status: 'pass',
+      name: `${label.toLowerCase()} command configured`,
+      detail: 'configured; not executed by ordinary Doctor',
+    });
     return;
   }
   const result = spawnSync(command, { cwd: root, encoding: 'utf8', shell: true, timeout: 120000 });
@@ -501,7 +501,11 @@ function verifyOptionalProfileCommand(checks, root, profile, label, deep) {
   const command = profileCommand(profile, label);
   if (!command) return;
   if (!deep) {
-    check(checks, true, `${label.toLowerCase()} command configured`);
+    checks.push({
+      status: 'pass',
+      name: `${label.toLowerCase()} command configured`,
+      detail: 'configured; not executed by ordinary Doctor',
+    });
     return;
   }
   const result = spawnSync(command, { cwd: root, encoding: 'utf8', shell: true, timeout: 120000 });

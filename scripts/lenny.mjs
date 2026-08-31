@@ -34,7 +34,7 @@ try {
       print(await setupProject({ target, force: Boolean(options.force) }), options);
       break;
     case 'doctor': {
-      const result = await doctorProject({ target, deep: options.deep !== 'false' });
+      const result = await doctorProject({ target, deep: options.deep === 'true' });
       print(result, options);
       if (!result.ok) process.exitCode = 1;
       break;
@@ -134,7 +134,7 @@ function help(commandName) {
   const commands = {
     install: 'lenny.mjs install --source PATH [--target PATH] [--dry-run]',
     setup: 'lenny.mjs setup [--target PATH] [--force]',
-    doctor: 'lenny.mjs doctor [--target PATH] [--json] [--deep false]',
+    doctor: 'lenny.mjs doctor [--target PATH] [--json] [--deep true]',
     risk: 'lenny.mjs risk [--target PATH] [--files a,b] [--description TEXT] [--reviewed-commit SHA --merge-base SHA] [--high] [--json]',
     uninstall: 'lenny.mjs uninstall [--target PATH] [--dry-run]',
     version: 'lenny.mjs version [--target PATH]',

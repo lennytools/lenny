@@ -20,12 +20,27 @@ Every gate has:
 All artifacts must be regular files inside the bundle and match their declared
 SHA-256. Except for risk and child/lane dependency receipts, every artifact is a
 machine-readable JSON receipt with `schemaVersion: 1`, matching `gateId`,
-`kind`, `reviewedCommit`, `exitCode: 0` and a parsed `verdict`. Tests, builds,
-leak scans and live QA include the exact `command` or named `workflow`.
+`kind`, `reviewedCommit`, `exitCode: 0` and a parsed `verdict`. Run tests,
+builds, leak scans and live QA through `scripts/run-gate.mjs`; those receipts
+contain the exact argv, real process exit, timing and output digest.
 Councils use `verdict: GO`; audits use `verdict: PASS`, `openP0: 0`,
 `openP1: 0` and matching reviewer/vendor identity. A manifest may not relabel a
 failed or narrative-only artifact as passing. Track the manifest and every
 required artifact in Git.
+
+This is a local evidence-consistency and process-reenactment interlock, not a
+cryptographic attestation service. A repository owner can forge local files or
+misstate reviewer identity. Preserve independent reviewer transcripts and
+provider/session identifiers for human audit; do not claim the validator proves
+who performed a review.
+
+Example deterministic gate:
+
+```bash
+node .lenny/core/skills/ship-conductor/scripts/run-gate.mjs \
+  --gate-id tests --kind test --reviewed-commit "$REVIEWED_COMMIT" \
+  --output .lenny/evidence/<run-id>/tests.json -- npm test
+```
 
 ## Required gates
 
