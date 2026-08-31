@@ -63,10 +63,10 @@ No validated P0/P1 finding may remain open. Code may not change after
 `reviewedCommit`. At strict closeout, the worktree must be clean and local `HEAD`
 must equal its upstream.
 
-The final closeout commit contains `.lenny/evidence/<run-id>` only. Active files
-under `.lenny/runs/<run-id>` must either already be present in `reviewedCommit`
-or remain untracked/local. Adding them after review correctly makes the evidence
-stale; do not rebind a review merely to repair commit ordering.
+The final closeout commit contains `.lenny/evidence/<run-id>` only. Phase 0-5
+run state under `.lenny/runs/<run-id>` must already be frozen in
+`reviewedCommit`. Adding or changing run state after review correctly makes the
+evidence stale; do not rebind a review merely to repair commit ordering.
 
 Run the validator first without a claim to diagnose the bundle, then run the
 strict interlock:

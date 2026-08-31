@@ -47,11 +47,10 @@ root while developing Lenny itself.
   outcome even when a council suggests an easier substitute.
 - Create `.lenny/runs/<run-id>/OUTCOME-CONTRACT.json` with Outcome Lock.
 - Create `.lenny/runs/<run-id>/CONDUCTOR-RUN.md`. Keep it current after every
-  phase so another context can resume from disk.
-- Treat `.lenny/runs/<run-id>` as active bookkeeping. If the project tracks it,
-  commit it before the final reviewed commit; otherwise leave it local. Never
-  add run-state files after `reviewedCommit`, because the strict interlock must
-  treat every non-evidence change as unreviewed code.
+  phase through Phase 5 so another context can resume from disk.
+- Run state is part of the reviewed change. Commit and freeze all
+  `.lenny/runs/<run-id>` files before selecting `reviewedCommit` for Phase 6.
+  Record later audit and closeout results only in `.lenny/evidence/<run-id>`.
 - Freeze `Must ship now / Fast follow / Not doing`. New ideas default to fast
   follow unless the accepted path cannot work without them.
 
@@ -168,6 +167,10 @@ inputs. If no user-facing runtime exists, state why browser QA is inapplicable
 and prove the real callable interface instead.
 
 Do not use passing unit tests as a substitute for a runnable workflow.
+
+Update the outcome contract and conductor ledger with all Phase 0-5 results,
+commit the run state, and freeze that commit as `reviewedCommit`. Do not modify
+`.lenny/runs/<run-id>` after this point.
 
 ## Phase 6: independent audit
 
