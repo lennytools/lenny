@@ -24,7 +24,7 @@ export function secretFindings(diff) {
     ['GitHub classic token', /ghp_[A-Za-z0-9]{36}/],
     ['GitHub fine-grained token', /github_pat_[A-Za-z0-9_]{20,}/],
     ['private key', /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
-    ['assigned credential', /(?:api[_-]?key|secret|token|password)\s*[:=]\s*['"][^'"]{8,}['"]/i],
+    ['assigned credential', /(?:api[_-]?key|secret|token|password)\s*[:=]\s*(?:['"][^'"\r\n]{8,}['"]|[^\s#]{8,})/i],
   ];
   return patterns.filter(([, pattern]) => pattern.test(added)).map(([name]) => name);
 }
@@ -33,9 +33,12 @@ export function privateReleaseFindings(files) {
   const findings = [];
   const privateTerms = ['Bradley' + ' Miles', 'Avalon' + ' Labs', 'A' + 'IX'];
   for (const [path, contents] of files) {
-    if (/\/(?:Users|home)\/[^/\s]+\//.test(contents)) findings.push(`${path}: absolute home path`);
+    if (/(?:^|[\s"'(])\/(?:Users|home)\/[^/\s"'()]+(?:\/|(?=$|[\s"'(),.;:]))/m.test(contents)) {
+      findings.push(`${path}: absolute home path`);
+    }
+    const normalized = contents.toLowerCase();
     for (const term of privateTerms) {
-      if (contents.includes(term)) findings.push(`${path}: private doctrine`);
+      if (normalized.includes(term.toLowerCase())) findings.push(`${path}: private doctrine`);
     }
   }
   return findings;
@@ -49,8 +52,10 @@ function main() {
     if (!bytes.includes(0)) textFiles.push([path, bytes.toString('utf8')]);
   }
   const boundaryFindings = privateReleaseFindings(textFiles);
+  const trackedText = textFiles.flatMap(([, contents]) => contents.split('\n').map((line) => `+${line}`)).join('\n');
+  const trackedSecrets = secretFindings(trackedText);
   const diff = git(['diff', '--unified=0', '--no-ext-diff', `${mergeBase}..HEAD`]);
-  const secrets = secretFindings(diff);
+  const secrets = [...new Set([...trackedSecrets, ...secretFindings(diff)])];
   if (boundaryFindings.length || secrets.length) {
     for (const finding of [...boundaryFindings, ...secrets.map((name) => `reviewed diff: ${name}`)]) {
       console.error(finding);

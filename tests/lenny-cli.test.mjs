@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
+  cpSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -96,6 +97,37 @@ test('release installation records immutable source provenance', async () => {
   assert.equal(manifest.sourceKind, 'release');
   assert.equal(manifest.repository, 'https://github.com/lennytools/lenny.git');
   assert.equal(manifest.commit, commit);
+});
+
+test('public CLI verifies release provenance against the source checkout', () => {
+  const releaseSource = mkdtempSync(join(tmpdir(), 'lenny-release-source-'));
+  created.push(releaseSource);
+  for (const name of ['VERSION', 'LICENSE', 'skills', 'scripts']) {
+    cpSync(join(source, name), join(releaseSource, name), { recursive: true });
+  }
+  run('git', ['init', '-q'], {}, releaseSource, true);
+  run('git', ['config', 'user.email', 'lenny@test.local'], {}, releaseSource, true);
+  run('git', ['config', 'user.name', 'Lenny Test'], {}, releaseSource, true);
+  run('git', ['remote', 'add', 'origin', 'https://github.com/lennytools/lenny.git'], {}, releaseSource, true);
+  run('git', ['add', '.'], {}, releaseSource, true);
+  run('git', ['commit', '-qm', 'release source'], {}, releaseSource, true);
+  const commit = run('git', ['rev-parse', 'HEAD'], {}, releaseSource, true).stdout.trim();
+  const target = fixture();
+  const cli = join(source, 'scripts', 'lenny.mjs');
+  const args = ['install', '--source', releaseSource, '--target', target, '--source-kind', 'release',
+    '--repository', 'https://github.com/lennytools/lenny.git', '--version', 'v0.1.0', '--commit', commit];
+  const valid = run(process.execPath, [cli, ...args]);
+  assert.equal(valid.status, 0, valid.stderr);
+  const falseCommit = run(process.execPath, [cli, ...args.slice(0, -1), 'a'.repeat(40)]);
+  assert.notEqual(falseCommit.status, 0);
+  assert.match(falseCommit.stderr, /HEAD does not match/);
+  const wrongRepository = [...args];
+  wrongRepository[wrongRepository.indexOf('--repository') + 1] = 'https://example.com/not-lenny.git';
+  assert.notEqual(run(process.execPath, [cli, ...wrongRepository]).status, 0);
+  writeFileSync(join(releaseSource, 'VERSION'), '9.9.9\n');
+  const modified = run(process.execPath, [cli, ...args]);
+  assert.notEqual(modified.status, 0);
+  assert.match(modified.stderr, /modified tracked files/);
 });
 
 test('reinstall compares managed bytes with the trusted source, not a forged local manifest', async () => {

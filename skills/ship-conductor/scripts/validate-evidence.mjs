@@ -4,7 +4,7 @@ import { lstatSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, relative, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { evaluateRisk } from './risk-policy.mjs';
+import { evaluateRisk, requiredCouncilsForRisk } from './risk-policy.mjs';
 
 const outcomeValidator = fileURLToPath(new URL('../../outcome-lock/scripts/validate-outcome.mjs', import.meta.url));
 
@@ -84,11 +84,13 @@ if (claimMergeReady) {
 
   if (claim.scope === 'ship') {
     const riskClass = claim.riskClass || 'high-stakes';
+    let riskTriggers = [];
     if (!['standard', 'high-stakes'].includes(riskClass)) throw new Error('invalid risk class');
     if (claim.riskClass) {
       const riskGates = passed('risk_classification');
       if (riskGates.length !== 1) throw new Error('exactly one passing risk classification required');
       const risk = JSON.parse(artifact(riskGates[0].artifact, riskGates[0].id).toString('utf8'));
+      riskTriggers = risk.triggers || [];
       if (risk.riskClass !== riskClass || risk.reviewedCommit !== manifest.reviewedCommit) {
         throw new Error('risk classification mismatch');
       }
@@ -133,6 +135,10 @@ if (claimMergeReady) {
     }
     if (!Array.isArray(claim.requiredCouncils) || !claim.requiredCouncils.length) {
       throw new Error('required council inventory missing');
+    }
+    const policyCouncils = requiredCouncilsForRisk({ riskClass, triggers: riskTriggers });
+    if (JSON.stringify([...claim.requiredCouncils].sort()) !== JSON.stringify([...policyCouncils].sort())) {
+      throw new Error('required council inventory does not match risk policy');
     }
     const councils = new Set(passed('council').map((gate) => gate.councilId));
     for (const council of claim.requiredCouncils) {

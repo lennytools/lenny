@@ -54,7 +54,20 @@ test('public release scanner detects private paths and representative secrets', 
   const findings = secretFindings(`diff --git a/x b/x\n+++ b/x\n+${fakeAws}\n+${fakeGitHub}\n`);
   assert(findings.includes('AWS secret key'));
   assert(findings.includes('GitHub classic token'));
+  const unquoted = ['api_', 'key=', 'unquoted-secret-value'].join('');
+  assert(secretFindings(`+++ b/x\n+${unquoted}\n`).includes('assigned credential'));
+  const terminalHome = ['/Users', '/example'].join('');
+  assert.deepEqual(privateReleaseFindings([['receipt.md', terminalHome]]),
+    ['receipt.md: absolute home path']);
+  const lowercasePrivate = ['bradley', ' miles'].join('');
+  assert.deepEqual(privateReleaseFindings([['receipt.md', lowercasePrivate]]),
+    ['receipt.md: private doctrine']);
   assert.deepEqual(secretFindings(`diff --git a/x b/x\n--- a/x\n-${fakeAws}\n+safe=true\n`), []);
+});
+
+test('the standing check executes the public release scanner', () => {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  assert(pkg.scripts.check.includes('node scripts/check-public-release.mjs'));
 });
 
 test('public release excludes Bradley-specific council packs and company doctrine', () => {

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import {
   classifyRisk,
   doctorProject,
@@ -29,17 +30,21 @@ try {
       if (runningFromInstalledCore) {
         throw new Error('installed Lenny cannot reinstall itself without trusted release provenance; rerun the pinned bootstrap install command from the release notes');
       }
-      print(await installProject({
-        source: resolve(options.source || scriptRoot),
-        target,
-        dryRun: Boolean(options['dry-run']),
-        provenance: {
-          sourceKind: options['source-kind'] || 'local-unverified',
-          repository: options.repository || '',
-          version: options.version || '',
-          commit: options.commit || '',
-        },
-      }), options);
+      {
+        const source = resolve(options.source || scriptRoot);
+        if (options['source-kind'] === 'release') verifyReleaseSource(source, options);
+        print(await installProject({
+          source,
+          target,
+          dryRun: Boolean(options['dry-run']),
+          provenance: {
+            sourceKind: options['source-kind'] || 'local-unverified',
+            repository: options.repository || '',
+            version: options.version || '',
+            commit: options.commit || '',
+          },
+        }), options);
+      }
       break;
     case 'setup':
       print(await setupProject({ target, force: Boolean(options.force) }), options);
@@ -103,6 +108,35 @@ function parseOptions(args) {
 function listOption(value) {
   if (!value) return [];
   return String(value).split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function verifyReleaseSource(source, options) {
+  const git = (...args) => {
+    const result = spawnSync('git', ['-C', source, ...args], { encoding: 'utf8' });
+    if (result.status !== 0) throw new Error('release source must be an immutable Git checkout');
+    return result.stdout.trim();
+  };
+  const commit = String(options.commit || '');
+  if (git('rev-parse', 'HEAD') !== commit) throw new Error('release source HEAD does not match --commit');
+  if (git('status', '--porcelain', '--untracked-files=no')) {
+    throw new Error('release source contains modified tracked files');
+  }
+  const expected = normalizeRepository(options.repository || '');
+  const actual = normalizeRepository(git('remote', 'get-url', 'origin'));
+  if (!expected || expected !== actual) throw new Error('release source origin does not match --repository');
+}
+
+function normalizeRepository(value) {
+  try {
+    const url = new URL(value);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return String(value).replace(/\/$/, '');
+  }
 }
 
 function validateOptions(commandName, options) {

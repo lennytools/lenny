@@ -104,7 +104,7 @@ const gates = [
   gate('live-qa', 'live_qa'),
   gate('audit-codex', 'p0_p1_audit', { reviewerId: 'codex-a', vendor: 'openai' }),
   gate('audit-claude', 'p0_p1_audit', { reviewerId: 'claude-b', vendor: 'anthropic' }),
-  gate('correctness-council', 'council', { councilId: 'example-council' }),
+  gate('correctness-council', 'council', { councilId: 'software-implementation' }),
   gate('terminal-debate', 'terminal_debate'),
   gate('done-council', 'done_council'),
   { id: 'outcome', kind: 'outcome_contract', required: true, status: 'pass',
@@ -115,7 +115,7 @@ writeFileSync(join(dir, 'manifest.json'), JSON.stringify({
   runId: 'example-run', reviewedCommit, mergeBase: reviewedCommit,
   diffSha256,
   claim: { status: 'merge-ready', scope: 'ship', drivingVendor: 'openai',
-    requiredCouncils: ['example-council'] },
+    requiredCouncils: ['software-implementation'] },
   gates,
   findings: [],
 }));
@@ -235,6 +235,16 @@ writeFileSync(join(dir, 'manifest.json'), originalManifest);
 run('git', ['add', '.lenny/evidence']);
 run('git', ['commit', '-qm', 'attest evidence']);
 run('node', [validator, dir]);
+const wrongCouncils = JSON.parse(originalManifest);
+wrongCouncils.claim.requiredCouncils = ['self-declared-cheap-council'];
+writeFileSync(join(dir, 'manifest.json'), JSON.stringify(wrongCouncils));
+const wrongCouncilResult = spawnSync('node', [validator, dir, '--claim-merge-ready'],
+  { cwd: root, encoding: 'utf8' });
+if (wrongCouncilResult.status === 0
+    || !wrongCouncilResult.stderr.includes('required council inventory does not match risk policy')) {
+  throw new Error(`interlock accepted a self-declared council policy: ${wrongCouncilResult.stderr}`);
+}
+writeFileSync(join(dir, 'manifest.json'), originalManifest);
 const remote = `${root}-remote.git`;
 run('git', ['init', '--bare', '-q', remote]);
 const branch = run('git', ['branch', '--show-current']);
@@ -243,7 +253,7 @@ run('git', ['config', `branch.${branch}.remote`, '.']);
 run('git', ['config', `branch.${branch}.merge`, 'refs/heads/spoof-local']);
 const spoofedLocal = spawnSync('node', [validator, dir, '--claim-merge-ready'], { cwd: root, encoding: 'utf8' });
 if (spoofedLocal.status === 0 || !spoofedLocal.stderr.includes('real configured remote')) {
-  throw new Error('interlock accepted a local branch as a pushed upstream');
+  throw new Error(`interlock accepted a local branch as a pushed upstream: ${spoofedLocal.stderr}`);
 }
 run('git', ['config', '--unset-all', `branch.${branch}.remote`]);
 run('git', ['config', '--unset-all', `branch.${branch}.merge`]);

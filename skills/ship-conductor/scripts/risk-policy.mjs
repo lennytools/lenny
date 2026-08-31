@@ -16,3 +16,7 @@ export function evaluateRisk({ files = [], description = '', forceHigh = false }
   if (forceHigh) triggers.unshift('explicit high-stakes override');
   return { riskClass: triggers.length ? 'high-stakes' : 'standard', triggers };
 }
+
+export function requiredCouncilsForRisk() {
+  return ['software-implementation'];
+}
