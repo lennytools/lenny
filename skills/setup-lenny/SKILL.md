@@ -65,8 +65,12 @@ state or an explicit user answer.
    node .lenny/core/bin/lenny.mjs doctor
    ```
 
-   Fix failed checks. Warnings must be disclosed but do not block when the host
-   capability genuinely cannot be observed from the CLI.
+   Deep Doctor runs the profile's configured test/build commands and any
+   configured lint/typecheck command. Unresolved test, build or live-QA fields
+   fail closed; use an explicit `Not applicable — <reason>` only when that gate
+   truly does not exist for this repository. Fix failed checks. Warnings must be
+   disclosed but do not block when the host capability genuinely cannot be
+   observed from the CLI.
 
 ## When the user says “set up my skills” or requests a council
 

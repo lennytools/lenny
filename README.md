@@ -63,6 +63,10 @@ Council and runs Doctor. Verify at any time:
 node .lenny/core/bin/lenny.mjs doctor
 ```
 
+Doctor checks managed installation state, Codex availability and the configured
+project test/build commands. Unresolved verification or live-QA fields fail
+closed until setup resolves them or records an explicit not-applicable reason.
+
 Every command supports local help without changing the repository:
 
 ```bash
