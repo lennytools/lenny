@@ -250,7 +250,10 @@ run('git', ['config', '--unset-all', `branch.${branch}.merge`]);
 run('git', ['remote', 'add', 'origin', '.']);
 run('git', ['config', `branch.${branch}.remote`, 'origin']);
 run('git', ['config', `branch.${branch}.merge`, `refs/heads/${branch}`]);
-for (const selfUrl of ['.', '.git', root, `file://${root}/.git`]) {
+const selfAlias = `${root}-alias`;
+symlinkSync(root, selfAlias);
+for (const selfUrl of ['.', '.git', '.git/..', `../${selfAlias.split('/').at(-1)}`,
+  root, `file://${root}/.git`]) {
   run('git', ['remote', 'set-url', 'origin', selfUrl]);
   const selfRemote = spawnSync('node', [validator, dir, '--claim-merge-ready'],
     { cwd: root, encoding: 'utf8' });
@@ -258,6 +261,7 @@ for (const selfUrl of ['.', '.git', root, `file://${root}/.git`]) {
     throw new Error(`interlock accepted self-referential named remote: ${selfUrl}`);
   }
 }
+unlinkSync(selfAlias);
 run('git', ['remote', 'remove', 'origin']);
 run('git', ['remote', 'add', 'origin', remote]);
 run('git', ['update-ref', `refs/remotes/origin/${branch}`, 'HEAD']);

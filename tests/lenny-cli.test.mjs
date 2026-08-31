@@ -245,6 +245,26 @@ test('ordinary doctor never executes commands preserved in a project profile', a
     && item.detail.includes('configured; not executed')));
 });
 
+test('doctor never executes inline code spans inside a Not applicable reason', async () => {
+  const target = fixture({ nodeProject: true });
+  await installProject({ source, target });
+  await setupProject({ target });
+  resolveLiveQa(target);
+  const profilePath = join(target, '.lenny/profile.md');
+  const profile = readFileSync(profilePath, 'utf8')
+    .replace('- Lint: **Not detected — verify before conducting.**',
+      '- Lint: **Not applicable — `package.json` declares no lint command.**')
+    .replace('- Typecheck: **Not detected — verify before conducting.**',
+      '- Typecheck: **Not applicable — `src/index.js` is plain JavaScript.**');
+  writeFileSync(profilePath, profile);
+  const result = await doctorProject({ target, deep: true });
+  assert.equal(result.ok, true, JSON.stringify(result.checks, null, 2));
+  assert(result.checks.some((item) => item.name === 'lint verification'
+    && item.status === 'pass'));
+  assert(result.checks.some((item) => item.name === 'typecheck verification'
+    && item.status === 'pass'));
+});
+
 test('risk selection is deterministic and fails upward', async () => {
   const target = fixture();
   const standard = await classifyRisk({ target, files: ['src/format-date.js'] });

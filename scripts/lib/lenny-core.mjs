@@ -556,6 +556,10 @@ function verifyProfileCommand(checks, root, profile, label, deep) {
 
 function verifyOptionalProfileCommand(checks, root, profile, label, deep) {
   const value = profileField(profile, label);
+  if (isNotApplicable(value)) {
+    check(checks, true, `${label.toLowerCase()} verification`, 'explicitly not applicable');
+    return;
+  }
   const command = profileCommand(profile, label);
   if (!command) return;
   if (!deep) {

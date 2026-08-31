@@ -354,7 +354,8 @@ function localRemoteTarget(url) {
   let path = null;
   if (url.startsWith('file://')) {
     try { path = fileURLToPath(url); } catch { return null; }
-  } else if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../') || url === '.' || url === '.git') {
+  } else if (!/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(url)
+      && !/^(?:[^/@:]+@)?[^/:]+:.+/.test(url)) {
     path = resolve(repoRoot, url);
   }
   if (!path) return null;
