@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "originalOutcome": "A stranger can install Lenny into a non-empty repository, say “set up Lenny,” receive a sensible three-seat implementation council and successfully conduct one small plan to a verified merge-ready branch.",
+  "lockHash": "sha256:4a5c2a4b7731cfbf83c8d17401b5fdaef63df6742d729a969117c549b5a73864",
+  "status": "in_progress",
+  "criteria": [
+    {
+      "id": "C1",
+      "text": "A Codex user can safely install Lenny into a non-empty repository without overwriting existing instructions or skills.",
+      "required": true,
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "C2",
+      "text": "The user can say “set up Lenny” and receive a repository-grounded .lenny/profile.md plus the default three-seat software implementation council.",
+      "required": true,
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "C3",
+      "text": "Lenny Doctor reports actionable installation, configuration, verification and Codex-host health.",
+      "required": true,
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "C4",
+      "text": "Standard and high-stakes implementation runs select deterministic, tested review requirements.",
+      "required": true,
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "C5",
+      "text": "Automated tests and CI prove clean install, non-empty install, idempotent update, rollback, diagnostics and the setup contract.",
+      "required": true,
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "C6",
+      "text": "The public repository has semantic version metadata, release documentation and a tested update path while personal councils remain excluded.",
+      "required": true,
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "C7",
+      "text": "One temporary Codex-style repository completes the installed setup workflow end to end and is ready to conduct a plan to merge-ready.",
+      "required": true,
+      "status": "pending",
+      "evidence": []
+    }
+  ],
+  "blockers": [],
+  "scopeChanges": []
+}

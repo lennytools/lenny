@@ -154,6 +154,44 @@ if (noLiveQa.status === 0 || !noLiveQa.stderr.includes('missing passing live_qa 
   throw new Error('interlock accepted missing live QA');
 }
 writeFileSync(manifestPath, validManifest);
+
+const standardManifest = JSON.parse(validManifest);
+standardManifest.claim.riskClass = 'standard';
+delete standardManifest.claim.crossVendorAuditWaiver;
+standardManifest.gates = standardManifest.gates.filter((item) =>
+  item.kind !== 'terminal_debate'
+  && item.kind !== 'cross_vendor_unavailable'
+  && item.id !== 'audit-claude'
+  && item.id !== 'audit-codex-c');
+const riskBytes = Buffer.from(`${JSON.stringify({
+  schemaVersion: 1,
+  riskClass: 'standard',
+  reviewedCommit,
+  files: ['code.txt'],
+  triggers: [],
+}, null, 2)}\n`);
+writeFileSync(join(dir, 'risk-classification.json'), riskBytes);
+standardManifest.gates.push({
+  id: 'risk-classification', kind: 'risk_classification', required: true,
+  status: 'pass', artifact: 'risk-classification.json',
+  sha256: createHash('sha256').update(riskBytes).digest('hex'), reviewedCommit,
+});
+writeFileSync(manifestPath, JSON.stringify(standardManifest));
+run('git', ['add', '.lenny/evidence']);
+run('git', ['commit', '-qm', 'attest standard risk path']);
+run('git', ['push', '-q']);
+const standardReceipt = run('node', [validator, dir, '--claim-merge-ready']);
+if (!standardReceipt.includes('MERGE-READY INTERLOCK: PASS')) {
+  throw new Error('standard risk interlock failed');
+}
+const missingRisk = structuredClone(standardManifest);
+missingRisk.gates = missingRisk.gates.filter((item) => item.kind !== 'risk_classification');
+writeFileSync(manifestPath, JSON.stringify(missingRisk));
+const noRisk = spawnSync('node', [validator, dir, '--claim-merge-ready'], { cwd: root, encoding: 'utf8' });
+if (noRisk.status === 0 || !noRisk.stderr.includes('risk classification required')) {
+  throw new Error('interlock accepted a declared risk class without classification evidence');
+}
+writeFileSync(manifestPath, JSON.stringify(standardManifest));
 writeFileSync(join(root, 'code.txt'), 'changed after review\n');
 const rejected = spawnSync('node', [validator, dir], { cwd: root });
 if (rejected.status === 0) throw new Error('validator accepted stale evidence');

@@ -76,23 +76,37 @@ if (claimMergeReady) {
     }
   }
   const passed = (kind) => manifest.gates.filter((gate) => gate.required !== false && gate.status === 'pass' && gate.kind === kind);
-  if (!passed('terminal_debate').length) throw new Error('missing passing terminal debate');
 
   if (claim.scope === 'ship') {
+    const riskClass = claim.riskClass || 'high-stakes';
+    if (!['standard', 'high-stakes'].includes(riskClass)) throw new Error('invalid risk class');
+    if (claim.riskClass) {
+      const riskGates = passed('risk_classification');
+      if (riskGates.length !== 1) throw new Error('exactly one passing risk classification required');
+      const risk = JSON.parse(artifact(riskGates[0].artifact, riskGates[0].id).toString('utf8'));
+      if (risk.riskClass !== riskClass || risk.reviewedCommit !== manifest.reviewedCommit) {
+        throw new Error('risk classification mismatch');
+      }
+    }
     if (!passed('done_council').length) throw new Error('missing passing done council');
     for (const kind of ['test', 'build', 'leak_scan', 'live_qa']) {
       if (!passed(kind).length) throw new Error(`missing passing ${kind} gate`);
     }
     const audits = passed('p0_p1_audit');
-    if (audits.length < 2 || new Set(audits.map((gate) => gate.reviewerId)).size < 2) {
-      throw new Error('two independent P0/P1 audits required');
-    }
-    const crossVendorPassed = claim.drivingVendor && audits.some((gate) => gate.vendor && gate.vendor !== claim.drivingVendor);
-    if (!crossVendorPassed) {
-      const waiver = passed('cross_vendor_unavailable').find((gate) => gate.attempts === 2);
-      const reviewerCount = new Set(audits.map((gate) => gate.reviewerId)).size;
-      if (!claim.drivingVendor || claim.crossVendorAuditWaiver !== true || !waiver || audits.length < 3 || reviewerCount < 3) {
-        throw new Error('cross-vendor P0/P1 audit or two-attempt waiver plus third independent audit required');
+    const reviewerCount = new Set(audits.map((gate) => gate.reviewerId)).size;
+    if (riskClass === 'standard') {
+      if (audits.length < 1 || reviewerCount < 1) throw new Error('one independent P0/P1 audit required for standard risk');
+    } else {
+      if (!passed('terminal_debate').length) throw new Error('missing passing terminal debate');
+      if (audits.length < 2 || reviewerCount < 2) {
+        throw new Error('two independent P0/P1 audits required for high-stakes risk');
+      }
+      const crossVendorPassed = claim.drivingVendor && audits.some((gate) => gate.vendor && gate.vendor !== claim.drivingVendor);
+      if (!crossVendorPassed) {
+        const waiver = passed('cross_vendor_unavailable').find((gate) => gate.attempts === 2);
+        if (!claim.drivingVendor || claim.crossVendorAuditWaiver !== true || !waiver || audits.length < 3 || reviewerCount < 3) {
+          throw new Error('cross-vendor P0/P1 audit or two-attempt waiver plus third independent audit required');
+        }
       }
     }
     if (!Array.isArray(claim.requiredCouncils) || !claim.requiredCouncils.length) {
@@ -103,6 +117,7 @@ if (claimMergeReady) {
       if (!councils.has(council)) throw new Error(`missing passing council: ${council}`);
     }
   } else {
+    if (!passed('terminal_debate').length) throw new Error('missing passing terminal debate');
     const dependencyKind = claim.scope === 'meta' ? 'child_receipt' : 'lane_receipt';
     if (!Array.isArray(claim.requiredDependencies) || !claim.requiredDependencies.length) {
       throw new Error('required dependency inventory missing');

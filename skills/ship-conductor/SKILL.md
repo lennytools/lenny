@@ -41,6 +41,52 @@ instructions file under a `## Conductor` section:
 - **Domain rails** - anything with data-loss, security, or outward-facing
   blast radius in this project.
 
+## Risk-adaptive execution (read `.lenny/profile.md` first)
+
+Lenny uses the smallest process that can still defend the outcome. Before Phase
+0, classify the proposed diff with the installed deterministic helper and save
+its JSON receipt beside the run ledger:
+
+```bash
+node .lenny/core/bin/lenny.mjs risk --json \
+  --files "comma,separated,changed,paths" > .lenny/runs/<run-id>/risk-classification.json
+```
+
+If Lenny is being developed from its own source repository, use
+`node scripts/lenny.mjs risk` instead. Re-run classification on the frozen
+review commit because changed files and semantics may have moved during the
+build. The agent must escalate to high-stakes when the user, repository profile
+or actual semantics reveal a high-impact path the filename classifier missed.
+It may never downgrade a mechanical high-stakes result without explicit human
+approval recorded in the outcome contract.
+
+### Standard
+
+For reversible work without authentication, secrets, money, custody,
+destructive persistence, migrations, production infrastructure or a security
+boundary:
+
+- one blind three-seat Software Implementation Council followed by one bounded
+  cross-critique and consensus;
+- one independent P0/P1 implementation audit;
+- tests, build, leak scan, live QA and the done-council remain mandatory;
+- a separate terminal cross-council debate and cross-vendor audit are omitted.
+
+### High-stakes
+
+For any named trigger above, uncertainty about material impact or explicit
+human escalation, use the complete pipeline in this skill:
+
+- full debate protocol;
+- two independent P0/P1 audits;
+- cross-vendor review or the bounded, disclosed waiver;
+- terminal cross-council debate;
+- all ordinary tests, build, leak scan, live QA and done-council gates.
+
+If a standard run discovers a high-stakes path, reclassify immediately and run
+the missing high-stakes gates. Risk adaptation may remove redundant review; it
+may not weaken executable proof.
+
 ## When to use
 
 - User says "conduct this", "run the conductor", "take this plan to launch/merge".
@@ -248,15 +294,17 @@ Before audits, consolidate current receipts into a required evidence gate with
 This covenant never authorizes production writes, credentials, destructive
 actions, deployments, external messages, or irreversible operations.
 
-### Phase 6 - Two independent P0 audits
+### Phase 6 - Independent P0 audits
 
 - Compute the **review range**: `merge-base(main, HEAD)..HEAD`. Commit any of your
   own uncommitted work first (surgically) so the range reflects "now".
 - **Leak-scan the bundle BEFORE it leaves the machine.** Reviewers are external
   models. Run the credential grep / gitleaks over the exact diff + any docs you're
   attaching, and fail closed on any finding.
-- Get **two independent, adversarial reviews** using separate contexts and, when
-  available, different model vendors. Independent means they do not see each other's output.
+- Get **one independent, adversarial review for standard work** or **two for
+  high-stakes work** using separate contexts. For high-stakes work, use different
+  model vendors when authorized and available. Independent means reviewers do
+  not see each other's output.
   Hand them `git diff <base>..<head>` and point them at the critical-path bulk.
 - **Audit claims are hypotheses, not findings.** Validate every claimed P0/P1
   against the actual code before fixing anything. A rejected claim gets a cited
@@ -272,9 +320,9 @@ actions, deployments, external messages, or irreversible operations.
 - **Gate:** zero open validated P0/P1. P2/P3 become parked follow-ups (logged,
   not silently dropped).
 
-### Terminal cross-council debate gate (mandatory)
+### Terminal cross-council debate gate (mandatory for high-stakes runs)
 
-After Phase 6 is green, freeze one final code commit and reconvene **every
+For a high-stakes run, after Phase 6 is green, freeze one final code commit and reconvene **every
 council selected anywhere in this run** as one terminal model council. This is
 separate from the earlier batch councils and audits; neither substitutes for it.
 Use debate-protocol mode on the exact frozen commit and complete gate evidence:
@@ -298,12 +346,17 @@ gates/audits, freeze a new commit, and repeat the full terminal debate. Store th
 rounds and verdict as `terminal-cross-council-debate.md`; require it as a passing
 manifest gate before merge-ready.
 
+For a standard run, the three-seat Software Implementation Council performs its
+cross-critique against the frozen candidate before the independent audit. The
+done-council remains the final outcome-level ruling. Do not manufacture a second
+terminal ceremony with the same seats and evidence.
+
 ### Mandatory conductor evidence bundle
 
 Before claiming merge-ready, commit `.lenny/evidence/<run-id>/` on the conducted
 branch. It contains `manifest.json` plus one artifact per required council,
-audit, build, test, live proof, re-audit, terminal cross-council debate, and
-Terminus done-council.
+audit, build, test, live proof, re-audit and Terminus done-council. High-stakes
+runs additionally require the terminal cross-council debate and second audit.
 Every artifact records its invocation time, exact reviewed commit + merge-base,
 diff SHA-256, and residual limitations. Machine-gate artifacts also record the
 command and exit code. Review artifacts also record the reviewer seat/model/vendor,
@@ -341,12 +394,13 @@ node skills/ship-conductor/scripts/validate-evidence.mjs \
 ```
 
 For a Ship claim, `manifest.json` must include `claim.status: merge-ready`,
-`claim.scope: ship`, `claim.drivingVendor`, and the complete
+`claim.scope: ship`, `claim.riskClass`, `claim.drivingVendor`, and the complete
 `claim.requiredCouncils` list. Required passing gates use typed `kind` values:
-`test`, `build`, `leak_scan`, `live_qa`, `council`, two independent
-`p0_p1_audit` entries with distinct `reviewerId` values and at least one vendor
-different from the driver, plus distinct `terminal_debate` and `done_council`
-gates. Council gates carry `councilId`.
+`risk_classification`, `test`, `build`, `leak_scan`, `live_qa`, `council`,
+`p0_p1_audit` and `done_council`. Council gates carry `councilId`. Standard
+runs require one independent audit. High-stakes runs require two distinct
+reviewers with at least one vendor different from the driver, plus a distinct
+`terminal_debate` gate.
 
 Strict mode also requires a fully clean worktree and exact local/upstream HEAD
 identity. On success it prints `MERGE-READY INTERLOCK: PASS` and a JSON receipt

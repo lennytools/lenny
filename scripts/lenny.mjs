@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import {
+  classifyRisk,
+  doctorProject,
+  installProject,
+  setupProject,
+  uninstallProject,
+} from './lib/lenny-core.mjs';
+
+const argv = process.argv.slice(2);
+const command = argv.shift();
+const options = parseOptions(argv);
+const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const target = resolve(options.target || process.cwd());
+
+try {
+  switch (command) {
+    case 'install':
+      print(await installProject({
+        source: resolve(options.source || scriptRoot),
+        target,
+        dryRun: Boolean(options['dry-run']),
+      }), options);
+      break;
+    case 'setup':
+      print(await setupProject({ target, force: Boolean(options.force) }), options);
+      break;
+    case 'doctor': {
+      const result = await doctorProject({ target, deep: options.deep !== 'false' });
+      print(result, options);
+      if (!result.ok) process.exitCode = 1;
+      break;
+    }
+    case 'risk':
+      print(await classifyRisk({
+        target,
+        files: listOption(options.files),
+        description: String(options.description || ''),
+        forceHigh: Boolean(options.high),
+        reviewedCommit: String(options['reviewed-commit'] || ''),
+      }), options);
+      break;
+    case 'uninstall':
+      print(await uninstallProject({ target, dryRun: Boolean(options['dry-run']) }), options);
+      break;
+    case 'version':
+      print({ ok: true, version: await installedVersion(target, scriptRoot) }, options);
+      break;
+    case 'help':
+    case '--help':
+    case '-h':
+    case undefined:
+      help();
+      break;
+    default:
+      throw new Error(`unknown command: ${command}`);
+  }
+} catch (error) {
+  if (options.json) {
+    console.error(JSON.stringify({ ok: false, error: error.message }));
+  } else {
+    console.error(`Lenny: ${error.message}`);
+  }
+  process.exitCode = 1;
+}
+
+function parseOptions(args) {
+  const result = {};
+  while (args.length) {
+    const item = args.shift();
+    if (!item.startsWith('--')) throw new Error(`unexpected argument: ${item}`);
+    const key = item.slice(2);
+    if (['dry-run', 'force', 'json', 'high'].includes(key)) {
+      result[key] = true;
+    } else {
+      if (!args.length) throw new Error(`${item} requires a value`);
+      result[key] = args.shift();
+    }
+  }
+  return result;
+}
+
+function listOption(value) {
+  if (!value) return [];
+  return String(value).split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function print(result, options) {
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  for (const line of result.lines || []) console.log(line);
+  if (!result.lines) console.log(result.version || JSON.stringify(result, null, 2));
+}
+
+async function installedVersion(targetPath, fallbackRoot) {
+  const { readFile } = await import('node:fs/promises');
+  for (const path of [resolve(targetPath, '.lenny/core/VERSION'), resolve(fallbackRoot, 'VERSION')]) {
+    try {
+      return (await readFile(path, 'utf8')).trim();
+    } catch {}
+  }
+  throw new Error('Lenny version is not installed');
+}
+
+function help() {
+  console.log(`Lenny\n\nUsage:\n  lenny.mjs install --source PATH [--target PATH] [--dry-run]\n  lenny.mjs setup [--target PATH] [--force]\n  lenny.mjs doctor [--target PATH] [--json]\n  lenny.mjs risk [--target PATH] [--files a,b] [--description TEXT] [--high]\n  lenny.mjs uninstall [--target PATH] [--dry-run]\n  lenny.mjs version [--target PATH]\n\nAfter installation, run:\n  node .lenny/core/bin/lenny.mjs setup\n  node .lenny/core/bin/lenny.mjs doctor`);
+}
