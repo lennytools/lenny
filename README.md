@@ -34,7 +34,7 @@ Requires Git, Node.js 20 or newer and Codex on macOS or Linux. Open the desired
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/<40-CHARACTER-RELEASE-COMMIT>/scripts/install.sh \
-  | sh -s -- --version v0.1.0 --commit <SAME-40-CHARACTER-RELEASE-COMMIT>
+  | sh -s -- --version v0.1.1 --commit <SAME-40-CHARACTER-RELEASE-COMMIT>
 ```
 
 Both the first downloaded byte and the source it executes are bound to the same
@@ -46,8 +46,8 @@ from the release page:
 curl -fsSLo /tmp/lenny-install.sh \
   https://raw.githubusercontent.com/lennytools/lenny/<RELEASE-COMMIT>/scripts/install.sh
 less /tmp/lenny-install.sh
-sh /tmp/lenny-install.sh --version v0.1.0 --commit <RELEASE-COMMIT> --dry-run
-sh /tmp/lenny-install.sh --version v0.1.0 --commit <RELEASE-COMMIT>
+sh /tmp/lenny-install.sh --version v0.1.1 --commit <RELEASE-COMMIT> --dry-run
+sh /tmp/lenny-install.sh --version v0.1.1 --commit <RELEASE-COMMIT>
 ```
 
 The installer owns only `.lenny/core` and one visibly marked block in

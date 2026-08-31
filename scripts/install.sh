@@ -2,7 +2,7 @@
 set -eu
 
 LENNY_REPOSITORY_URL="${LENNY_REPOSITORY_URL:-https://github.com/lennytools/lenny.git}"
-LENNY_VERSION="${LENNY_VERSION:-v0.1.0}"
+LENNY_VERSION="${LENNY_VERSION:-v0.1.1}"
 LENNY_COMMIT="${LENNY_COMMIT:-__LENNY_RELEASE_COMMIT__}"
 LENNY_TARGET="${LENNY_TARGET:-$PWD}"
 LENNY_SOURCE="${LENNY_SOURCE_DIR:-}"
@@ -45,7 +45,7 @@ Usage: install.sh [--target PATH] [--version TAG] [--commit SHA] [--dry-run]
 Environment:
   LENNY_SOURCE_DIR      Use a local Lenny checkout instead of cloning.
   LENNY_REPOSITORY_URL  Override the canonical repository URL.
-  LENNY_VERSION         Release tag (default: v0.1.0).
+  LENNY_VERSION         Release tag (default: v0.1.1).
   LENNY_COMMIT          Immutable 40-character release commit.
   LENNY_TARGET          Override the target project (default: current directory).
 EOF

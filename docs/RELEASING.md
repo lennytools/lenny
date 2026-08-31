@@ -5,7 +5,7 @@ a reviewed `main` commit selects a release; the immutable full commit is the
 installation trust anchor. The release job
 fails when the tagged commit is not reachable from canonical `main`. Enable
 GitHub immutable releases and a tag ruleset that forbids updating or deleting
-`v*` before publishing v0.1.0. Never advertise a mutable branch as stable.
+`v*` before publishing a release. Never advertise a mutable branch as stable.
 
 ## Compatibility contract
 
@@ -40,14 +40,14 @@ only `.lenny/core` and the marked `AGENTS.md` routing block:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/<RELEASE-COMMIT>/scripts/install.sh \
-  | sh -s -- --version v0.1.0 --commit <RELEASE-COMMIT>
+  | sh -s -- --version v0.1.1 --commit <RELEASE-COMMIT>
 ```
 
 Preview first with `--dry-run`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lennytools/lenny/<RELEASE-COMMIT>/scripts/install.sh \
-  | sh -s -- --version v0.1.0 --commit <RELEASE-COMMIT> --dry-run
+  | sh -s -- --version v0.1.1 --commit <RELEASE-COMMIT> --dry-run
 ```
 
 Core updates never overwrite `.lenny/profile.md`, evidence or run history.

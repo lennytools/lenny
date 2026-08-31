@@ -5,6 +5,12 @@ semantic versioning.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-31
+
+### Fixed
+
+- Isolate release-metadata tests from GitHub Actions tag environment variables.
+
 ## [0.1.0] - 2026-08-31
 
 ### Added
@@ -17,5 +23,6 @@ semantic versioning.
 - Install, update, rollback, setup, doctor, risk and uninstall tests.
 - GitHub Actions verification and release automation.
 
-[Unreleased]: https://github.com/lennytools/lenny/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lennytools/lenny/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/lennytools/lenny/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/lennytools/lenny/releases/tag/v0.1.0
