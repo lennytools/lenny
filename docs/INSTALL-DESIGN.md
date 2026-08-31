@@ -20,3 +20,8 @@ agent orchestration system.
 - Make reinstall idempotent.
 - Keep user profile, evidence and run history through update and uninstall.
 - End installation with one memorable instruction: **“Set up Lenny.”**
+
+Doctor's installed manifest detects accidental local drift. It is not a
+security boundary against an attacker who can rewrite both `.lenny/core` and
+its colocated manifest. Reinstalling from a trusted protected release compares
+the target against fresh source bytes and repairs even a forged local manifest.

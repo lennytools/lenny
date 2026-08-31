@@ -26,8 +26,20 @@ const diffSha256 = createHash('sha256').update(reviewedDiff.stdout).digest('hex'
 const dir = join(root, '.lenny/evidence/example-run');
 mkdirSync(dir, { recursive: true });
 const gate = (id, kind, extra = {}) => {
-  const artifact = Buffer.from(`${id}: pass\nreviewedCommit: ${reviewedCommit}\n`);
-  const artifactName = `${id}.md`;
+  const verdict = ['council', 'terminal_debate', 'done_council'].includes(kind) ? 'GO' : 'PASS';
+  const receipt = {
+    schemaVersion: 1,
+    gateId: id,
+    kind,
+    reviewedCommit,
+    verdict,
+    exitCode: 0,
+    ...(['test', 'build', 'leak_scan', 'live_qa'].includes(kind) ? { command: `fixture:${id}` } : {}),
+    ...(kind === 'p0_p1_audit' ? { openP0: 0, openP1: 0 } : {}),
+    ...extra,
+  };
+  const artifact = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
+  const artifactName = `${id}.json`;
   writeFileSync(join(dir, artifactName), artifact);
   return { id, kind, required: true, status: 'pass', artifact: artifactName,
     sha256: createHash('sha256').update(artifact).digest('hex'), reviewedCommit, ...extra };
@@ -52,6 +64,7 @@ writeFileSync(join(dir, 'manifest.json'), JSON.stringify({
   findings: [],
 }));
 const originalManifest = readFileSync(join(dir, 'manifest.json'), 'utf8');
+const originalTestArtifact = readFileSync(join(dir, 'tests.json'));
 const wrongDiff = JSON.parse(originalManifest);
 wrongDiff.diffSha256 = '0'.repeat(64);
 writeFileSync(join(dir, 'manifest.json'), JSON.stringify(wrongDiff));
@@ -67,10 +80,25 @@ unboundManifest.gates[0].sha256 = createHash('sha256').update(unboundArtifact).d
 writeFileSync(join(dir, unboundManifest.gates[0].artifact), unboundArtifact);
 writeFileSync(join(dir, 'manifest.json'), JSON.stringify(unboundManifest));
 const unbound = spawnSync('node', [validator, dir], { cwd: root, encoding: 'utf8' });
-if (unbound.status === 0 || !unbound.stderr.includes('artifact not bound to reviewed commit')) {
+if (unbound.status === 0 || !unbound.stderr.includes('gate receipt is not valid JSON')) {
   throw new Error('validator accepted an artifact without commit binding');
 }
-writeFileSync(join(dir, unboundManifest.gates[0].artifact), Buffer.from(`tests: pass\nreviewedCommit: ${reviewedCommit}\n`));
+writeFileSync(join(dir, unboundManifest.gates[0].artifact), originalTestArtifact);
+writeFileSync(join(dir, 'manifest.json'), originalManifest);
+
+const failedReceipt = JSON.parse(originalTestArtifact.toString('utf8'));
+failedReceipt.verdict = 'FAIL';
+failedReceipt.exitCode = 1;
+const failedBytes = Buffer.from(`${JSON.stringify(failedReceipt, null, 2)}\n`);
+const failedManifest = JSON.parse(originalManifest);
+failedManifest.gates[0].sha256 = createHash('sha256').update(failedBytes).digest('hex');
+writeFileSync(join(dir, failedManifest.gates[0].artifact), failedBytes);
+writeFileSync(join(dir, 'manifest.json'), JSON.stringify(failedManifest));
+const relabelledFailure = spawnSync('node', [validator, dir], { cwd: root, encoding: 'utf8' });
+if (relabelledFailure.status === 0 || !relabelledFailure.stderr.includes('did not pass at reviewed commit')) {
+  throw new Error('validator accepted a failed gate relabelled pass by the manifest');
+}
+writeFileSync(join(dir, failedManifest.gates[0].artifact), originalTestArtifact);
 writeFileSync(join(dir, 'manifest.json'), originalManifest);
 
 const outsideArtifact = join(root, 'outside-artifact.md');
@@ -108,7 +136,13 @@ if (external.status === 0) {
 
 const crossVendorManifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
 crossVendorManifest.claim.crossVendorAuditWaiver = true;
-crossVendorManifest.gates.find((item) => item.id === 'audit-claude').vendor = 'openai';
+const claudeGate = crossVendorManifest.gates.find((item) => item.id === 'audit-claude');
+claudeGate.vendor = 'openai';
+const claudeReceipt = JSON.parse(readFileSync(join(dir, claudeGate.artifact), 'utf8'));
+claudeReceipt.vendor = 'openai';
+const claudeBytes = Buffer.from(`${JSON.stringify(claudeReceipt, null, 2)}\n`);
+writeFileSync(join(dir, claudeGate.artifact), claudeBytes);
+claudeGate.sha256 = createHash('sha256').update(claudeBytes).digest('hex');
 crossVendorManifest.gates.push(
   gate('audit-codex-c', 'p0_p1_audit', { reviewerId: 'codex-c', vendor: 'openai' }),
   gate('cross-vendor-unavailable', 'cross_vendor_unavailable', { attempts: 2 }),
@@ -123,12 +157,22 @@ if (!waivedReceipt.includes('MERGE-READY INTERLOCK: PASS')) throw new Error('bou
 const manifestPath = join(dir, 'manifest.json');
 const validManifest = readFileSync(manifestPath, 'utf8');
 const oneAttempt = JSON.parse(validManifest);
-oneAttempt.gates.find((item) => item.kind === 'cross_vendor_unavailable').attempts = 1;
+const oneAttemptGate = oneAttempt.gates.find((item) => item.kind === 'cross_vendor_unavailable');
+oneAttemptGate.attempts = 1;
+const oneAttemptReceipt = JSON.parse(readFileSync(join(dir, oneAttemptGate.artifact), 'utf8'));
+oneAttemptReceipt.attempts = 1;
+const oneAttemptBytes = Buffer.from(`${JSON.stringify(oneAttemptReceipt, null, 2)}\n`);
+writeFileSync(join(dir, oneAttemptGate.artifact), oneAttemptBytes);
+oneAttemptGate.sha256 = createHash('sha256').update(oneAttemptBytes).digest('hex');
 writeFileSync(manifestPath, JSON.stringify(oneAttempt));
 const prematureWaiver = spawnSync('node', [validator, dir, '--claim-merge-ready'], { cwd: root, encoding: 'utf8' });
 if (prematureWaiver.status === 0 || !prematureWaiver.stderr.includes('two-attempt waiver')) {
   throw new Error('interlock accepted a one-attempt audit waiver');
 }
+writeFileSync(join(dir, oneAttemptGate.artifact), Buffer.from(`${JSON.stringify({
+  ...oneAttemptReceipt,
+  attempts: 2,
+}, null, 2)}\n`));
 writeFileSync(manifestPath, validManifest);
 const missingTerminal = JSON.parse(validManifest);
 missingTerminal.gates = missingTerminal.gates.filter((item) => item.kind !== 'terminal_debate');
@@ -167,7 +211,8 @@ const riskBytes = Buffer.from(`${JSON.stringify({
   schemaVersion: 1,
   riskClass: 'standard',
   reviewedCommit,
-  files: ['code.txt'],
+  mergeBase: reviewedCommit,
+  files: [],
   triggers: [],
 }, null, 2)}\n`);
 writeFileSync(join(dir, 'risk-classification.json'), riskBytes);
@@ -220,7 +265,14 @@ const laneReceipt = Buffer.from(JSON.stringify({
   evidenceManifestSha256: laneManifestSha256,
 }));
 const graphHash = createHash('sha256').update(`lane-a:${laneHead}:${laneManifestSha256}\n`).digest('hex');
-const terminal = Buffer.from(`fleet terminal debate: pass\nreviewedCommit: ${graphHash}\n`);
+const terminal = Buffer.from(`${JSON.stringify({
+  schemaVersion: 1,
+  gateId: 'fleet-terminal',
+  kind: 'terminal_debate',
+  reviewedCommit: graphHash,
+  verdict: 'GO',
+  exitCode: 0,
+}, null, 2)}\n`);
 writeFileSync(join(fleetDir, 'lane-a.json'), laneReceipt);
 writeFileSync(join(fleetDir, 'lane-a-manifest.json'), laneManifest);
 writeFileSync(join(fleetDir, 'terminal.md'), terminal);

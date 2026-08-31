@@ -11,11 +11,13 @@ import {
 
 const argv = process.argv.slice(2);
 const command = argv.shift();
-const options = parseOptions(argv);
 const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const target = resolve(options.target || process.cwd());
+let options = {};
 
 try {
+  options = parseOptions(argv);
+  validateOptions(command, options);
+  const target = resolve(options.target || process.cwd());
   if (options.help) {
     help(command);
     process.exit(0);
@@ -44,6 +46,7 @@ try {
         description: String(options.description || ''),
         forceHigh: Boolean(options.high),
         reviewedCommit: String(options['reviewed-commit'] || ''),
+        mergeBase: String(options['merge-base'] || ''),
       }), options);
       break;
     case 'uninstall':
@@ -91,6 +94,23 @@ function listOption(value) {
   return String(value).split(',').map((item) => item.trim()).filter(Boolean);
 }
 
+function validateOptions(commandName, options) {
+  const schemas = {
+    install: ['source', 'target', 'dry-run', 'json', 'help'],
+    setup: ['target', 'force', 'json', 'help'],
+    doctor: ['target', 'deep', 'json', 'help'],
+    risk: ['target', 'files', 'description', 'high', 'reviewed-commit', 'merge-base', 'json', 'help'],
+    uninstall: ['target', 'dry-run', 'json', 'help'],
+    version: ['target', 'json', 'help'],
+    help: ['help'],
+  };
+  const allowed = schemas[commandName];
+  if (!allowed) return;
+  for (const key of Object.keys(options)) {
+    if (!allowed.includes(key)) throw new Error(`unsupported option for ${commandName}: --${key}`);
+  }
+}
+
 function print(result, options) {
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
@@ -115,7 +135,7 @@ function help(commandName) {
     install: 'lenny.mjs install --source PATH [--target PATH] [--dry-run]',
     setup: 'lenny.mjs setup [--target PATH] [--force]',
     doctor: 'lenny.mjs doctor [--target PATH] [--json] [--deep false]',
-    risk: 'lenny.mjs risk [--target PATH] [--files a,b] [--description TEXT] [--high] [--json]',
+    risk: 'lenny.mjs risk [--target PATH] [--files a,b] [--description TEXT] [--reviewed-commit SHA --merge-base SHA] [--high] [--json]',
     uninstall: 'lenny.mjs uninstall [--target PATH] [--dry-run]',
     version: 'lenny.mjs version [--target PATH]',
   };

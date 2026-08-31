@@ -36,10 +36,7 @@ for (const gate of manifest.gates) {
   const artifactBytes = artifact(gate.artifact, gate.id);
   const digest = createHash('sha256').update(artifactBytes).digest('hex');
   if (digest !== gate.sha256) throw new Error(`hash mismatch: ${gate.id}`);
-  if (!['child_receipt', 'lane_receipt'].includes(gate.kind)
-      && !artifactBytes.toString('utf8').includes(manifest.reviewedCommit)) {
-    throw new Error(`artifact not bound to reviewed commit: ${gate.id}`);
-  }
+  validateGateReceipt(gate, artifactBytes, manifest.reviewedCommit);
 }
 for (const finding of manifest.findings || []) {
   if (['P0', 'P1'].includes(finding.severity) && finding.validation === 'validated' && finding.status !== 'closed') {
@@ -86,6 +83,14 @@ if (claimMergeReady) {
       const risk = JSON.parse(artifact(riskGates[0].artifact, riskGates[0].id).toString('utf8'));
       if (risk.riskClass !== riskClass || risk.reviewedCommit !== manifest.reviewedCommit) {
         throw new Error('risk classification mismatch');
+      }
+      if (risk.mergeBase !== manifest.mergeBase) throw new Error('risk classification merge-base mismatch');
+      const expectedRiskFiles = manifest.mergeBase === manifest.reviewedCommit
+        ? []
+        : gitText(['-C', repoRoot, 'diff', '--name-only', `${manifest.mergeBase}..${manifest.reviewedCommit}`])
+          .split('\n').filter(Boolean).sort();
+      if (JSON.stringify([...(risk.files || [])].sort()) !== JSON.stringify(expectedRiskFiles)) {
+        throw new Error('risk classification file inventory mismatch');
       }
     }
     if (!passed('done_council').length) throw new Error('missing passing done council');
@@ -200,4 +205,38 @@ function artifact(name, id) {
   const realRel = relative(realDir, realFile);
   if (realRel.startsWith(`..${sep}`) || realRel === '..') throw new Error(`artifact escapes bundle: ${id}`);
   return readFileSync(realFile);
+}
+
+function validateGateReceipt(gate, bytes, reviewedCommit) {
+  if (['child_receipt', 'lane_receipt', 'risk_classification'].includes(gate.kind)) return;
+  let receipt;
+  try {
+    receipt = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    throw new Error(`gate receipt is not valid JSON: ${gate.id}`);
+  }
+  if (receipt.schemaVersion !== 1 || receipt.gateId !== gate.id || receipt.kind !== gate.kind) {
+    throw new Error(`gate receipt identity mismatch: ${gate.id}`);
+  }
+  if (receipt.reviewedCommit !== reviewedCommit || receipt.exitCode !== 0) {
+    throw new Error(`gate receipt did not pass at reviewed commit: ${gate.id}`);
+  }
+  const expectedVerdict = ['council', 'terminal_debate', 'done_council'].includes(gate.kind) ? 'GO' : 'PASS';
+  if (receipt.verdict !== expectedVerdict) throw new Error(`gate receipt verdict is not ${expectedVerdict}: ${gate.id}`);
+  if (['test', 'build', 'leak_scan', 'live_qa'].includes(gate.kind)
+      && typeof receipt.command !== 'string' && typeof receipt.workflow !== 'string') {
+    throw new Error(`gate receipt lacks command or workflow: ${gate.id}`);
+  }
+  if (gate.kind === 'p0_p1_audit') {
+    if (receipt.openP0 !== 0 || receipt.openP1 !== 0
+        || receipt.reviewerId !== gate.reviewerId || receipt.vendor !== gate.vendor) {
+      throw new Error(`audit receipt mismatch or open blocker: ${gate.id}`);
+    }
+  }
+  if (gate.kind === 'council' && receipt.councilId !== gate.councilId) {
+    throw new Error(`council receipt mismatch: ${gate.id}`);
+  }
+  if (gate.kind === 'cross_vendor_unavailable' && receipt.attempts !== gate.attempts) {
+    throw new Error(`cross-vendor receipt mismatch: ${gate.id}`);
+  }
 }

@@ -17,9 +17,15 @@ Every gate has:
 - `councilId` for a council;
 - `reviewerId` and `vendor` for an audit.
 
-All artifacts must be regular files inside the bundle, contain the reviewed
-commit in their text and match their declared SHA-256. Track the manifest and
-every required artifact in Git.
+All artifacts must be regular files inside the bundle and match their declared
+SHA-256. Except for risk and child/lane dependency receipts, every artifact is a
+machine-readable JSON receipt with `schemaVersion: 1`, matching `gateId`,
+`kind`, `reviewedCommit`, `exitCode: 0` and a parsed `verdict`. Tests, builds,
+leak scans and live QA include the exact `command` or named `workflow`.
+Councils use `verdict: GO`; audits use `verdict: PASS`, `openP0: 0`,
+`openP1: 0` and matching reviewer/vendor identity. A manifest may not relabel a
+failed or narrative-only artifact as passing. Track the manifest and every
+required artifact in Git.
 
 ## Required gates
 

@@ -74,7 +74,14 @@ When developing Lenny itself, use `node scripts/lenny.mjs risk`.
   explicit escalation.
 
 Repository semantics and the user may escalate. Never mechanically downgrade.
-Re-run the classifier against the frozen reviewed commit.
+Re-run the classifier against the frozen reviewed commit and its exact merge
+base. Do not supply a hand-written file list in the final receipt:
+
+```bash
+node .lenny/core/bin/lenny.mjs risk --json \
+  --reviewed-commit "<full-commit-sha>" --merge-base "<full-base-sha>" \
+  > .lenny/runs/<run-id>/risk-classification.json
+```
 
 Create a fresh feature branch from current base. Fetch first when a remote exists.
 Preserve pre-existing user changes and stage only files owned by this run.

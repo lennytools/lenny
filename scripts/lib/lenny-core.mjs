@@ -12,11 +12,12 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 export const MANAGED_START = '<!-- lenny:start -->';
 export const MANAGED_END = '<!-- lenny:end -->';
+export const MANAGED_PREFIX = '<!-- lenny:managed-block -->';
 const REQUIRED_SKILLS = [
   'setup-lenny',
   'ship-conductor',
@@ -38,6 +39,7 @@ export async function installProject({ source, target, dryRun = false }) {
   const version = readText(join(sourceRoot, 'VERSION')).trim();
   const sourceSkills = sourcePath(sourceRoot, 'skills');
   const sourceScripts = sourcePath(sourceRoot, 'scripts', 'bin');
+  const expectedFiles = expectedInstallFiles(sourceRoot, sourceSkills, sourceScripts, version);
   for (const skill of REQUIRED_SKILLS) {
     if (!existsSync(join(sourceSkills, skill, 'SKILL.md'))) {
       throw new Error(`source is missing required skill: ${skill}`);
@@ -49,7 +51,7 @@ export async function installProject({ source, target, dryRun = false }) {
   const nextAgents = mergeManagedBlock(oldAgents?.toString('utf8') || '', managedAgentsBlock());
   const corePath = join(targetRoot, '.lenny', 'core');
   refuseSymlink(corePath);
-  const current = sameInstall(corePath, version) && nextAgents === (oldAgents?.toString('utf8') || '');
+  const current = sameInstall(corePath, version, expectedFiles) && nextAgents === (oldAgents?.toString('utf8') || '');
 
   if (dryRun) {
     return {
@@ -133,6 +135,7 @@ export async function installProject({ source, target, dryRun = false }) {
 export async function setupProject({ target, force = false }) {
   const targetRoot = resolve(target);
   assertDirectory(targetRoot, 'target project');
+  refuseSymlink(join(targetRoot, '.lenny'));
   const version = readText(join(targetRoot, '.lenny', 'core', 'VERSION')).trim();
   const profilePath = join(targetRoot, '.lenny', 'profile.md');
   refuseSymlink(profilePath);
@@ -158,8 +161,8 @@ export async function setupProject({ target, force = false }) {
     lines: [
       `Lenny ${version} set up for ${basename(targetRoot)}.`,
       `✓ Stack: ${observed.stack}`,
-      `✓ Test: ${observed.commands.test || 'not detected; verify with the user'}`,
-      `✓ Build: ${observed.commands.build || 'not detected; verify with the user'}`,
+      `Detected test command: ${observed.commands.test || 'none; resolve in the profile before Doctor can pass'}`,
+      `Detected build command: ${observed.commands.build || 'none; resolve in the profile before Doctor can pass'}`,
       '✓ Default council: contract/correctness · failure/security · simplicity/maintainability',
       'Next: review .lenny/profile.md, then run Lenny Doctor.',
     ],
@@ -174,7 +177,7 @@ export async function doctorProject({ target, deep = true }) {
   const core = join(targetRoot, '.lenny', 'core');
   check(checks, existsSync(join(core, 'VERSION')), 'Lenny core', 'rerun the pinned installer');
   check(checks, existsSync(join(core, 'install.json')) && verifyInstallIntegrity(core),
-    'managed core integrity', 'rerun the pinned installer; managed files changed');
+    'managed core local consistency', 'rerun the pinned installer; managed files changed');
   for (const skill of REQUIRED_SKILLS) {
     check(checks, existsSync(join(core, 'skills', skill, 'SKILL.md')), `skill:${skill}`, 'rerun the pinned installer');
   }
@@ -190,6 +193,15 @@ export async function doctorProject({ target, deep = true }) {
     check(checks, profile.includes('## Verification commands'), 'profile verification commands', 'rerun setup or repair the profile');
     check(checks, profile.includes('software-implementation'), 'default implementation council', 'restore the council entry');
     check(checks, profile.includes('## Risk policy'), 'risk policy', 'restore the risk policy section');
+    for (const label of ['Test', 'Build']) {
+      verifyProfileCommand(checks, targetRoot, profile, label, deep);
+    }
+    for (const label of ['Lint', 'Typecheck']) {
+      verifyOptionalProfileCommand(checks, targetRoot, profile, label, deep);
+    }
+    const liveQa = profileField(profile, 'Live QA');
+    check(checks, Boolean(liveQa) && !isUnresolved(liveQa), 'profile live QA',
+      'define the real live-QA workflow or explicitly mark it Not applicable with a reason');
   }
   const codex = spawnSync('codex', ['--version'], { encoding: 'utf8', timeout: 5000 });
   checks.push({
@@ -234,9 +246,25 @@ export async function doctorProject({ target, deep = true }) {
   };
 }
 
-export async function classifyRisk({ target, files = [], description = '', forceHigh = false, reviewedCommit = '' }) {
+export async function classifyRisk({
+  target,
+  files = [],
+  description = '',
+  forceHigh = false,
+  reviewedCommit = '',
+  mergeBase = '',
+}) {
   const targetRoot = resolve(target);
-  const changedFiles = files.length ? files : gitChangedFiles(targetRoot);
+  if (Boolean(reviewedCommit) !== Boolean(mergeBase)) {
+    throw new Error('--reviewed-commit and --merge-base must be supplied together');
+  }
+  const committedFiles = reviewedCommit
+    ? gitDiffFiles(targetRoot, mergeBase, reviewedCommit)
+    : [];
+  if (reviewedCommit && files.length && !sameStringSet(files, committedFiles)) {
+    throw new Error('explicit risk files do not match the reviewed commit diff');
+  }
+  const changedFiles = reviewedCommit ? committedFiles : (files.length ? files : gitChangedFiles(targetRoot));
   const haystack = [...changedFiles, description].join('\n').toLowerCase();
   const triggerPatterns = [
     ['authentication or authorization', /(^|[\/_.-])(auth|oauth|session|permission|rbac|acl)([\/_.-]|$)/],
@@ -254,6 +282,7 @@ export async function classifyRisk({ target, files = [], description = '', force
     ok: true,
     schemaVersion: 1,
     reviewedCommit: reviewedCommit || gitHead(targetRoot),
+    ...(mergeBase ? { mergeBase } : {}),
     riskClass,
     files: changedFiles,
     triggers,
@@ -270,6 +299,7 @@ export async function classifyRisk({ target, files = [], description = '', force
 export async function uninstallProject({ target, dryRun = false }) {
   const targetRoot = resolve(target);
   assertDirectory(targetRoot, 'target project');
+  refuseSymlink(join(targetRoot, '.lenny'));
   const agentsPath = join(targetRoot, 'AGENTS.md');
   const corePath = join(targetRoot, '.lenny', 'core');
   const agents = existsSync(agentsPath) ? readText(agentsPath) : '';
@@ -293,28 +323,39 @@ export async function uninstallProject({ target, dryRun = false }) {
 }
 
 export function mergeManagedBlock(existing, block) {
-  const starts = count(existing, MANAGED_START);
-  const ends = count(existing, MANAGED_END);
-  if (starts !== ends || starts > 1) throw new Error('AGENTS.md has malformed or duplicate Lenny managed markers');
-  if (starts === 1) {
-    const start = existing.indexOf(MANAGED_START);
-    const end = existing.indexOf(MANAGED_END, start) + MANAGED_END.length;
+  const range = managedMarkerRange(existing);
+  if (range) {
+    const { start, end } = range;
     return `${existing.slice(0, start)}${block}${existing.slice(end)}`;
   }
   const separator = existing.length && !existing.endsWith('\n\n') ? (existing.endsWith('\n') ? '\n' : '\n\n') : '';
-  return `${existing}${separator}${block}\n`;
+  return `${existing}${MANAGED_PREFIX}${separator}${block}\n`;
 }
 
 export function removeManagedBlock(existing) {
+  const range = managedMarkerRange(existing);
+  if (!range) return existing;
+  const { start, end } = range;
+  const prefix = existing.lastIndexOf(MANAGED_PREFIX, start);
+  const removeStart = prefix >= 0 ? prefix : start;
+  const removeEnd = existing[end] === '\n' ? end + 1 : end;
+  return `${existing.slice(0, removeStart)}${existing.slice(removeEnd)}`;
+}
+
+function managedMarkerRange(existing) {
   const starts = count(existing, MANAGED_START);
   const ends = count(existing, MANAGED_END);
+  const prefixes = count(existing, MANAGED_PREFIX);
   if (starts !== ends || starts > 1) throw new Error('AGENTS.md has malformed or duplicate Lenny managed markers');
-  if (!starts) return existing;
+  if (!starts && prefixes) throw new Error('AGENTS.md has an orphaned Lenny managed-block prefix');
+  if (!starts) return null;
+  if (prefixes > 1) throw new Error('AGENTS.md has duplicate Lenny managed-block prefixes');
   const start = existing.indexOf(MANAGED_START);
-  const end = existing.indexOf(MANAGED_END, start) + MANAGED_END.length;
-  const before = existing.slice(0, start).replace(/\n{3,}$/, '\n\n');
-  const after = existing.slice(end).replace(/^\n{3,}/, '\n\n');
-  return `${before}${after}`.replace(/^\n+|\n+$/g, (match) => match.includes('\n') ? '\n' : match);
+  const endStart = existing.indexOf(MANAGED_END, start + MANAGED_START.length);
+  if (endStart < 0 || existing.indexOf(MANAGED_END) < start) {
+    throw new Error('AGENTS.md has malformed or reversed Lenny managed markers');
+  }
+  return { start, end: endStart + MANAGED_END.length };
 }
 
 function managedAgentsBlock() {
@@ -329,10 +370,30 @@ function sourcePath(root, sourceName, installedName = sourceName) {
   throw new Error(`source is missing ${sourceName}`);
 }
 
-function sameInstall(corePath, version) {
+function sameInstall(corePath, version, expectedFiles) {
   return existsSync(join(corePath, 'VERSION'))
     && readText(join(corePath, 'VERSION')).trim() === version
-    && verifyInstallIntegrity(corePath);
+    && sameHashMap(fileHashes(corePath, ['install.json']), expectedFiles);
+}
+
+function expectedInstallFiles(sourceRoot, sourceSkills, sourceScripts, version) {
+  const result = {};
+  for (const file of walkFiles(sourceSkills)) {
+    result[join('skills', relative(sourceSkills, file))] = sha256(readFileSync(file));
+  }
+  for (const file of walkFiles(sourceScripts)) {
+    result[join('bin', relative(sourceScripts, file))] = sha256(readFileSync(file));
+  }
+  result.VERSION = sha256(Buffer.from(`${version}\n`));
+  if (existsSync(join(sourceRoot, 'LICENSE'))) result.LICENSE = sha256(readFileSync(join(sourceRoot, 'LICENSE')));
+  return result;
+}
+
+function sameHashMap(left, right) {
+  const leftNames = Object.keys(left).sort();
+  const rightNames = Object.keys(right).sort();
+  return JSON.stringify(leftNames) === JSON.stringify(rightNames)
+    && leftNames.every((name) => left[name] === right[name]);
 }
 
 function verifyInstallIntegrity(corePath) {
@@ -396,6 +457,57 @@ function detectProject(root) {
   return result;
 }
 
+function profileField(profile, label) {
+  const match = profile.match(new RegExp(`^- ${label}: (.*)$`, 'm'));
+  return match?.[1]?.trim() || '';
+}
+
+function profileCommand(profile, label) {
+  const value = profileField(profile, label);
+  const match = value.match(/`([^`]+)`/);
+  return match?.[1]?.trim() || '';
+}
+
+function isUnresolved(value) {
+  return !value || /not detected|verify before conducting/i.test(value);
+}
+
+function isNotApplicable(value) {
+  return /^\*\*Not applicable\b|^Not applicable\b/i.test(value);
+}
+
+function verifyProfileCommand(checks, root, profile, label, deep) {
+  const value = profileField(profile, label);
+  const command = profileCommand(profile, label);
+  if (isNotApplicable(value)) {
+    check(checks, true, `${label.toLowerCase()} verification`, 'explicitly not applicable');
+    return;
+  }
+  if (isUnresolved(value) || !command) {
+    check(checks, false, `${label.toLowerCase()} verification`,
+      `set a reviewed command in backticks or explicitly mark ${label} Not applicable with a reason`);
+    return;
+  }
+  if (!deep) {
+    check(checks, true, `${label.toLowerCase()} command configured`);
+    return;
+  }
+  const result = spawnSync(command, { cwd: root, encoding: 'utf8', shell: true, timeout: 120000 });
+  check(checks, result.status === 0, `${label.toLowerCase()} command`, summarizeFailure(result));
+}
+
+function verifyOptionalProfileCommand(checks, root, profile, label, deep) {
+  const value = profileField(profile, label);
+  const command = profileCommand(profile, label);
+  if (!command) return;
+  if (!deep) {
+    check(checks, true, `${label.toLowerCase()} command configured`);
+    return;
+  }
+  const result = spawnSync(command, { cwd: root, encoding: 'utf8', shell: true, timeout: 120000 });
+  check(checks, result.status === 0, `${label.toLowerCase()} command`, summarizeFailure(result));
+}
+
 function renderProfile({ version, observed }) {
   const command = (name) => observed.commands[name] ? `\`${observed.commands[name]}\`` : '**Not detected — verify before conducting.**';
   return `# Lenny Project Profile\n\nThis is the project-specific source of truth read by Lenny. It is preserved\nacross core updates. Edit observed facts only after verifying them in this\nrepository.\n\n## Installation\n\n- Profile schema: 1\n- Host: Codex\n- Stack: ${observed.stack}\n- Package manager: ${observed.packageManager || 'not detected'}\n\n## Verification commands\n\n- Test: ${command('test')}\n- Build: ${command('build')}\n- Lint: ${command('lint')}\n- Typecheck: ${command('typecheck')}\n- Live QA: **Not detected — define the actual user-visible workflow before conducting.**\n\nNever claim a command passed without running that exact command successfully in\nthe current repository.\n\n## Council\n\nDefault: \`software-implementation\`\n\n- Contract / correctness: does the implementation satisfy the frozen outcome?\n- Failure / security: how can it fail, lose data or violate authority?\n- Simplicity / maintainability: is it the smallest coherent change with honest boundaries?\n\nThe council definition lives at\n\`.lenny/core/skills/council/references/software-implementation-council.md\`.\n\n## Risk policy\n\n- Default: automatic\n- Standard: one three-seat implementation council and one independent audit,\n  while retaining tests, build, leak scan, live QA and done review.\n- High-stakes: full debate, two independent audits and cross-vendor review when\n  authorized and available.\n- High-stakes triggers include authentication, authorization, secrets, money,\n  custody, destructive persistence, migrations, production infrastructure and\n  security-sensitive behavior. Uncertainty escalates to high-stakes.\n\n## Merge policy\n\nLenny may create and push a branch. It must stop at merge-ready. The human opens\nthe pull request and merges.\n\n## Project-specific rails\n\n- Preserve existing user files and instructions outside Lenny-managed paths.\n- Add repository-specific security, data and operational rails here.\n`;
@@ -406,6 +518,19 @@ function gitChangedFiles(root) {
   const result = spawnSync('git', ['-C', root, 'status', '--porcelain'], { encoding: 'utf8' });
   if (result.status !== 0) return [];
   return result.stdout.split('\n').filter(Boolean).map((line) => line.slice(3)).filter(Boolean);
+}
+
+function gitDiffFiles(root, mergeBase, reviewedCommit) {
+  if (!isGitRepository(root)) throw new Error('reviewed risk classification requires a Git repository');
+  const ancestor = spawnSync('git', ['-C', root, 'merge-base', '--is-ancestor', mergeBase, reviewedCommit]);
+  if (ancestor.status !== 0) throw new Error('merge base is not an ancestor of the reviewed commit');
+  const result = spawnSync('git', ['-C', root, 'diff', '--name-only', `${mergeBase}..${reviewedCommit}`], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error('cannot derive files from the reviewed commit diff');
+  return result.stdout.split('\n').map((item) => item.trim()).filter(Boolean).sort();
+}
+
+function sameStringSet(left, right) {
+  return JSON.stringify([...new Set(left)].sort()) === JSON.stringify([...new Set(right)].sort());
 }
 
 function isGitRepository(root) {

@@ -1,8 +1,10 @@
 # Releasing Lenny
 
-GitHub `main` is the canonical public source. A signed or GitHub-verified tag is
-the immutable installation source. Never advertise installation from a mutable
-branch as stable.
+GitHub `main` is the canonical public source. A protected `v*` tag created from
+a reviewed `main` commit is the stable installation source. The release job
+fails when the tagged commit is not reachable from canonical `main`. Enable
+GitHub immutable releases and a tag ruleset that forbids updating or deleting
+`v*` before publishing v0.1.0. Never advertise a mutable branch as stable.
 
 ## Compatibility contract
 
@@ -24,7 +26,8 @@ branch as stable.
 5. Confirm no personal council, private path, credential or company-specific
    artifact appears in the release diff.
 6. Merge through human review.
-7. Create and push `v<version>` from the reviewed `main` commit.
+7. Confirm immutable releases and the `v*` tag ruleset are enabled, then create
+   and push `v<version>` from the reviewed `main` commit.
 8. GitHub Actions reruns the complete matrix and creates the GitHub release.
 9. Install once from the published tag and run Lenny Doctor.
 

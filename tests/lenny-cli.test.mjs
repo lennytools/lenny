@@ -21,6 +21,8 @@ import {
   installProject,
   MANAGED_END,
   MANAGED_START,
+  mergeManagedBlock,
+  removeManagedBlock,
   setupProject,
   uninstallProject,
 } from '../scripts/lib/lenny-core.mjs';
@@ -60,14 +62,37 @@ test('doctor detects managed-core tampering and reinstall repairs it', async () 
   const target = fixture({ nodeProject: true });
   await installProject({ source, target });
   await setupProject({ target });
+  resolveLiveQa(target);
   const skill = join(target, '.lenny/core/skills/setup-lenny/SKILL.md');
   writeFileSync(skill, `${readFileSync(skill, 'utf8')}\ntampered\n`);
   const unhealthy = await doctorProject({ target, deep: false });
   assert.equal(unhealthy.ok, false);
-  assert(unhealthy.checks.some((item) => item.name === 'managed core integrity' && item.status === 'fail'));
+  assert(unhealthy.checks.some((item) => item.name === 'managed core local consistency' && item.status === 'fail'));
   const repair = await installProject({ source, target });
   assert.equal(repair.changed, true);
   assert.equal((await doctorProject({ target, deep: false })).ok, true);
+});
+
+test('reinstall compares managed bytes with the trusted source, not a forged local manifest', async () => {
+  const target = fixture({ nodeProject: true });
+  await installProject({ source, target });
+  await setupProject({ target });
+  resolveLiveQa(target);
+  const core = join(target, '.lenny/core');
+  const skill = join(core, 'skills/setup-lenny/SKILL.md');
+  writeFileSync(skill, `${readFileSync(skill, 'utf8')}\nmalicious local instruction\n`);
+  const manifestPath = join(core, 'install.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.files = Object.fromEntries(walk(core)
+    .filter((file) => file !== manifestPath)
+    .map((file) => [relative(core, file), sha256(readFileSync(file))]));
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  // Doctor's colocated manifest detects accidental drift, not a hostile local
+  // rewrite of both code and manifest. A fresh trusted installer must repair it.
+  assert.equal((await doctorProject({ target, deep: false })).ok, true);
+  const repair = await installProject({ source, target });
+  assert.equal(repair.changed, true);
+  assert(!readFileSync(skill, 'utf8').includes('malicious local instruction'));
 });
 
 test('rolls an interrupted update back to the previous bytes', async () => {
@@ -95,6 +120,21 @@ test('refuses ambiguous managed markers rather than guessing', async () => {
   assert.equal(text(target, 'AGENTS.md'), `${MANAGED_START}\nmissing end\n`);
 });
 
+test('refuses reversed managed markers rather than corrupting instructions', async () => {
+  const target = fixture();
+  const reversed = `${MANAGED_END}\nuser content\n${MANAGED_START}\n`;
+  writeFileSync(join(target, 'AGENTS.md'), reversed);
+  await assert.rejects(() => installProject({ source, target }), /malformed or reversed/);
+  assert.equal(text(target, 'AGENTS.md'), reversed);
+});
+
+test('managed AGENTS block round-trips user bytes exactly', () => {
+  const block = `${MANAGED_START}\nmanaged\n${MANAGED_END}`;
+  for (const original of ['', '# User', '# User\n', '# User\n\n', '# User\n\n\n', '\n# User\n\n']) {
+    assert.equal(removeManagedBlock(mergeManagedBlock(original, block)), original);
+  }
+});
+
 test('refuses symlinked managed targets', async () => {
   const target = fixture();
   const outside = mkdtempSync(join(tmpdir(), 'lenny-outside-'));
@@ -102,6 +142,17 @@ test('refuses symlinked managed targets', async () => {
   symlinkSync(outside, join(target, '.lenny'));
   await assert.rejects(() => installProject({ source, target }), /refusing to modify symlink/);
   assert.equal(readdirSync(outside).length, 0);
+});
+
+test('uninstall refuses a symlinked .lenny ancestor', async () => {
+  const target = fixture();
+  const outside = mkdtempSync(join(tmpdir(), 'lenny-outside-uninstall-'));
+  created.push(outside);
+  mkdirSync(join(outside, 'core'), { recursive: true });
+  writeFileSync(join(outside, 'core', 'victim.txt'), 'preserve\n');
+  symlinkSync(outside, join(target, '.lenny'));
+  await assert.rejects(() => uninstallProject({ target }), /refusing to modify symlink/);
+  assert.equal(text(outside, 'core/victim.txt'), 'preserve\n');
 });
 
 test('setup detects verified Node commands and preserves a reviewed profile', async () => {
@@ -126,8 +177,25 @@ test('doctor is actionable before setup and healthy after setup', async () => {
   assert.equal(before.ok, false);
   assert(before.checks.some((item) => item.name === 'project profile' && item.status === 'fail'));
   await setupProject({ target });
+  resolveLiveQa(target);
   const after = await doctorProject({ target, deep: true });
   assert.equal(after.ok, true, JSON.stringify(after.checks, null, 2));
+});
+
+test('doctor fails unresolved setup and failing verification commands', async () => {
+  const target = fixture({ nodeProject: true });
+  const pkg = JSON.parse(text(target, 'package.json'));
+  pkg.scripts.test = "node -e \"process.exit(7)\"";
+  writeFileSync(join(target, 'package.json'), `${JSON.stringify(pkg, null, 2)}\n`);
+  await installProject({ source, target });
+  await setupProject({ target });
+  const unresolved = await doctorProject({ target, deep: true });
+  assert.equal(unresolved.ok, false);
+  assert(unresolved.checks.some((item) => item.name === 'profile live QA' && item.status === 'fail'));
+  resolveLiveQa(target);
+  const failed = await doctorProject({ target, deep: true });
+  assert.equal(failed.ok, false);
+  assert(failed.checks.some((item) => item.name === 'test command' && item.status === 'fail'));
 });
 
 test('risk selection is deterministic and fails upward', async () => {
@@ -142,6 +210,23 @@ test('risk selection is deterministic and fails upward', async () => {
   assert(installer.triggers.includes('installer or package supply chain'));
   const override = await classifyRisk({ target, files: ['README.md'], forceHigh: true });
   assert.equal(override.riskClass, 'high-stakes');
+});
+
+test('reviewed risk derives the exact committed diff and rejects partial inventories', async () => {
+  const target = fixture();
+  const mergeBase = run('git', ['rev-parse', 'HEAD'], {}, target, true).stdout.trim();
+  mkdirSync(join(target, 'scripts'), { recursive: true });
+  writeFileSync(join(target, 'scripts/install.sh'), '#!/bin/sh\n');
+  run('git', ['add', 'scripts/install.sh'], {}, target, true);
+  run('git', ['commit', '-qm', 'add installer'], {}, target, true);
+  const reviewedCommit = run('git', ['rev-parse', 'HEAD'], {}, target, true).stdout.trim();
+  const risk = await classifyRisk({ target, reviewedCommit, mergeBase });
+  assert.equal(risk.riskClass, 'high-stakes');
+  assert.deepEqual(risk.files, ['scripts/install.sh']);
+  assert.equal(risk.mergeBase, mergeBase);
+  await assert.rejects(() => classifyRisk({
+    target, reviewedCommit, mergeBase, files: ['README.md'],
+  }), /do not match/);
 });
 
 test('uninstall removes only managed core and routing', async () => {
@@ -168,12 +253,27 @@ test('the public shell installer completes the Codex setup contract', () => {
   assert.equal(install.status, 0, install.stderr);
   assert(install.stdout.includes('Next: open Codex and say “Set up Lenny.”'));
   assert.equal(run(process.execPath, [join(target, '.lenny/core/bin/lenny.mjs'), 'setup', '--target', target]).status, 0);
+  resolveLiveQa(target);
   const doctor = run(process.execPath,
     [join(target, '.lenny/core/bin/lenny.mjs'), 'doctor', '--target', target, '--json']);
   assert.equal(doctor.status, 0, doctor.stderr);
   assert.equal(JSON.parse(doctor.stdout).ok, true);
   assert.equal(run('npm', ['run', 'test'], {}, target).status, 0);
   assert.equal(run('npm', ['run', 'build'], {}, target).status, 0);
+});
+
+test('public commands reject typos and unsupported mutating options', async () => {
+  const target = fixture({ nodeProject: true });
+  await installProject({ source, target });
+  const cli = join(target, '.lenny/core/bin/lenny.mjs');
+  const typo = run(process.execPath, [cli, 'uninstall', '--targte', target], {}, target);
+  assert.notEqual(typo.status, 0);
+  assert(typo.stderr.includes('unsupported option'));
+  assert.equal(statSync(join(target, '.lenny/core')).isDirectory(), true);
+  const unsupported = run(process.execPath, [cli, 'setup', '--dry-run'], {}, target);
+  assert.notEqual(unsupported.status, 0);
+  assert(unsupported.stderr.includes('unsupported option'));
+  assert.throws(() => statSync(join(target, '.lenny/profile.md')));
 });
 
 test('every public command has non-destructive help', () => {
@@ -232,6 +332,15 @@ function run(command, args, env = {}, cwd = source, throwOnError = false) {
 
 function text(root, path) {
   return readFileSync(join(root, path), 'utf8');
+}
+
+function resolveLiveQa(target) {
+  const path = join(target, '.lenny/profile.md');
+  const profile = readFileSync(path, 'utf8').replace(
+    '- Live QA: **Not detected — define the actual user-visible workflow before conducting.**',
+    '- Live QA: **Not applicable — fixture has no user-facing runtime; exported behavior is covered by tests.**',
+  );
+  writeFileSync(path, profile);
 }
 
 function instances(value, needle) {
