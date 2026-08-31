@@ -379,7 +379,8 @@ function sameInstall(corePath, version, expectedFiles, provenance) {
   } catch {
     return false;
   }
-  return manifest.schemaVersion === 2
+  return manifest && typeof manifest === 'object' && !Array.isArray(manifest)
+    && manifest.schemaVersion === 2
     && manifest.version === version
     && manifest.managedRoot === '.lenny/core'
     && manifest.files && !Array.isArray(manifest.files)

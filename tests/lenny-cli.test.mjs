@@ -95,6 +95,12 @@ test('reinstall repairs malformed install manifest metadata', async () => {
   assert.equal(repaired.changed, true);
   const healthy = await doctorProject({ target });
   assert.equal(healthy.ok, true, JSON.stringify(healthy.checks, null, 2));
+  for (const invalidManifest of [null, 7, [], 'invalid']) {
+    writeFileSync(manifestPath, `${JSON.stringify(invalidManifest)}\n`);
+    assert.equal((await doctorProject({ target })).ok, false);
+    assert.equal((await installProject({ source, target })).changed, true);
+    assert.equal((await doctorProject({ target })).ok, true);
+  }
   const repairedManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   repairedManifest.files.VERSION = '0'.repeat(64);
   writeFileSync(manifestPath, `${JSON.stringify(repairedManifest, null, 2)}\n`);
@@ -344,7 +350,8 @@ test('risk selection is deterministic and fails upward', async () => {
   const installer = await classifyRisk({ target, files: ['scripts/install.sh', '.github/workflows/release.yml'] });
   assert.equal(installer.riskClass, 'high-stakes');
   assert(installer.triggers.includes('installer or package supply chain'));
-  for (const path of ['src/password-reset.js', 'src/jwt.js', 'src/api-key-store.js', 'src/access-control.js']) {
+  for (const path of ['src/password-reset.js', 'src/passwordReset.js', 'src/jwt.js', 'src/jwtVerifier.js',
+    'src/api-key-store.js', 'src/apiKeyStore.js', 'src/access-control.js', 'src/accessControl.js']) {
     const auth = await classifyRisk({ target, files: [path] });
     assert.equal(auth.riskClass, 'high-stakes', path);
     assert(auth.triggers.includes('authentication or authorization'), path);
