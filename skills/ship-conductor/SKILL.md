@@ -78,12 +78,13 @@ When developing Lenny itself, use `node scripts/lenny.mjs risk`.
 
 Repository semantics and the user may escalate. Never mechanically downgrade.
 Re-run the classifier against the frozen reviewed commit and its exact merge
-base. Do not supply a hand-written file list in the final receipt:
+base after the Phase 5 freeze. Write the final receipt directly into the
+evidence bundle; do not supply a hand-written file list:
 
 ```bash
 node .lenny/core/bin/lenny.mjs risk --json \
   --reviewed-commit "<full-commit-sha>" --merge-base "<full-base-sha>" \
-  > .lenny/runs/<run-id>/risk-classification.json
+  > .lenny/evidence/<run-id>/risk-classification.json
 ```
 
 Create a fresh feature branch from current base. Fetch first when a remote exists.
@@ -170,7 +171,11 @@ Do not use passing unit tests as a substitute for a runnable workflow.
 
 Update the outcome contract and conductor ledger with all Phase 0-5 results,
 commit the run state, and freeze that commit as `reviewedCommit`. Do not modify
-`.lenny/runs/<run-id>` after this point.
+`.lenny/runs/<run-id>` after this point. Then replay the final risk
+classification, every deterministic gate and every required council against
+that exact commit, writing the final receipts directly under
+`.lenny/evidence/<run-id>`. Earlier receipts are exploratory and cannot satisfy
+the merge-ready interlock.
 
 ## Phase 6: independent audit
 

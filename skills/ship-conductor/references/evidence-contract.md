@@ -67,6 +67,9 @@ The final closeout commit contains `.lenny/evidence/<run-id>` only. Phase 0-5
 run state under `.lenny/runs/<run-id>` must already be frozen in
 `reviewedCommit`. Adding or changing run state after review correctly makes the
 evidence stale; do not rebind a review merely to repair commit ordering.
+Every required gate, council and audit receipt must be produced or replayed
+against that frozen commit. A receipt from before the run-state freeze is stale
+even when the product files did not change.
 
 Run the validator first without a claim to diagnose the bundle, then run the
 strict interlock:

@@ -18,7 +18,12 @@ run('git', ['init', '-q']);
 run('git', ['config', 'user.email', 'lenny@test.local']);
 run('git', ['config', 'user.name', 'Lenny Test']);
 writeFileSync(join(root, 'code.txt'), 'reviewed\n');
-run('git', ['add', 'code.txt']);
+mkdirSync(join(root, '.lenny/runs/example-run'), { recursive: true });
+writeFileSync(join(root, '.lenny/runs/example-run/OUTCOME-CONTRACT.json'),
+  '{"status":"complete","criteria":[]}\n');
+writeFileSync(join(root, '.lenny/runs/example-run/CONDUCTOR-RUN.md'),
+  '# Frozen before final review\n');
+run('git', ['add', 'code.txt', '.lenny/runs']);
 run('git', ['commit', '-qm', 'reviewed']);
 const reviewedCommit = run('git', ['rev-parse', 'HEAD']);
 const reviewedDiff = spawnSync('git', ['diff-tree', '--root', '--binary', '--no-commit-id', '-r', reviewedCommit], { cwd: root });
