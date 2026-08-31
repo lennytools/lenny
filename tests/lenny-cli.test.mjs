@@ -49,7 +49,7 @@ test('installs into a non-empty project without changing user-authored content',
   assert.equal(instances(agents, MANAGED_START), 1);
   assert.equal(instances(agents, MANAGED_END), 1);
   assert.equal(text(target, 'skills/custom/SKILL.md'), 'personal\n');
-  assert.equal(text(target, '.lenny/core/VERSION').trim(), '0.1.0');
+  assert.equal(text(target, '.lenny/core/VERSION').trim(), '0.1.1');
   assert.equal(statSync(join(target, '.lenny/core/bin/lenny.mjs')).isFile(), true);
   assert.equal(statSync(join(target, '.lenny/core/bin/lib/lenny-core.mjs')).isFile(), true);
   assert.throws(() => statSync(join(target, '.lenny/core/bin/check-release.mjs')));
@@ -119,7 +119,7 @@ test('release installation records immutable source provenance', async () => {
     provenance: {
       sourceKind: 'release',
       repository,
-      version: 'v0.1.0',
+      version: 'v0.1.1',
       commit,
     },
   });
@@ -146,7 +146,7 @@ test('public CLI verifies release provenance against the source checkout', () =>
   const target = fixture();
   const cli = join(source, 'scripts', 'lenny.mjs');
   const args = ['install', '--source', releaseSource, '--target', target, '--source-kind', 'release',
-    '--repository', 'https://github.com/lennytools/lenny.git', '--version', 'v0.1.0', '--commit', commit];
+    '--repository', 'https://github.com/lennytools/lenny.git', '--version', 'v0.1.1', '--commit', commit];
   const valid = run(process.execPath, [cli, ...args]);
   assert.equal(valid.status, 0, valid.stderr);
   const falseCommit = run(process.execPath, [cli, ...args.slice(0, -1), 'a'.repeat(40)]);
@@ -521,7 +521,7 @@ test('installed core cannot silently replace release provenance with a local rei
     provenance: {
       sourceKind: 'release',
       repository: 'https://github.com/lennytools/lenny.git',
-      version: 'v0.1.0',
+      version: 'v0.1.1',
       commit,
     },
   });

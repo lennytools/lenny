@@ -8,17 +8,29 @@ import test from 'node:test';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const checker = join(root, 'scripts', 'check-release.mjs');
+const currentVersion = readFileSync(join(root, 'VERSION'), 'utf8').trim();
+const releaseCheckEnv = { ...process.env };
+delete releaseCheckEnv.GITHUB_REF_TYPE;
+delete releaseCheckEnv.GITHUB_REF_NAME;
 
 test('release metadata accepts the exact semantic-version tag', () => {
-  const result = spawnSync(process.execPath, [checker, 'v0.1.0'], { cwd: root, encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [checker, `v${currentVersion}`], {
+    cwd: root,
+    encoding: 'utf8',
+    env: releaseCheckEnv,
+  });
   assert.equal(result.status, 0, result.stderr);
-  assert(result.stdout.includes('release metadata valid: v0.1.0'));
+  assert(result.stdout.includes(`release metadata valid: v${currentVersion}`));
 });
 
 test('release metadata rejects a mismatched tag', () => {
-  const result = spawnSync(process.execPath, [checker, 'v9.9.9'], { cwd: root, encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [checker, 'v9.9.9'], {
+    cwd: root,
+    encoding: 'utf8',
+    env: releaseCheckEnv,
+  });
   assert.notEqual(result.status, 0);
-  assert(result.stderr.includes('does not match v0.1.0'));
+  assert(result.stderr.includes(`does not match v${currentVersion}`));
 });
 
 test('release automation pins actions and gates publication on the full compatibility matrix', () => {
@@ -41,7 +53,7 @@ test('release automation pins actions and gates publication on the full compatib
   assert(release.includes('REMOTE_TAG_COMMIT'));
   assert(release.includes('--target "$EVENT_COMMIT"'));
   const readme = readFileSync(join(root, 'README.md'), 'utf8');
-  assert(!readme.includes('raw.githubusercontent.com/lennytools/lenny/v0.1.0/scripts/install.sh'));
+  assert(!/raw\.githubusercontent\.com\/lennytools\/lenny\/v\d+\.\d+\.\d+\/scripts\/install\.sh/.test(readme));
   assert(readme.includes('--commit <SAME-40-CHARACTER-RELEASE-COMMIT>'));
 });
 
